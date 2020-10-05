@@ -1,0 +1,6 @@
+Final Assembly Plant Inc. hereby agrees to
+receive the delivery of order
+{componentOrderHash} at {timeOfDelivery} to its
+premises. The delivery will be performed either
+by Carrier Inc. or any of its contractors.
+

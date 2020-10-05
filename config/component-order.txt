@@ -1,0 +1,7 @@
+Final Assembly Plant Inc. hereby makes an order
+for {quantity} units of "{articleId}" at the
+unit price of {unitPrice} EUR from Component
+Supplier Inc.
+
+The units are to be delivered by Carrier Inc.
+to the Final Assembly Plant at {timeOfDelivery}.

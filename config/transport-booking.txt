@@ -1,0 +1,11 @@
+Component Supplier Inc. hereby agrees to pay
+{price} EUR to Carrier Inc. in exchange for
+completing the delivery of order
+{componentOrderHash}.
+
+The delivery units are to be picked up from
+Component Supplier Inc. at {timeOfPickup}.
+
+The delivery units are to arrive at Final
+Assembly Plant Inc. at {timeOfDelivery}.
+

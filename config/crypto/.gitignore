@@ -1,0 +1,7 @@
+/**/*.ca
+/**/*.crt
+/**/*.key
+/**/*.p12
+/**/*.pub
+!/parties/*.p12
+!/arrowhead.p12

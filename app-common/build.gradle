@@ -1,0 +1,13 @@
+plugins {
+    id 'java-library'
+}
+
+ext {
+    versionArkalix = '0.4.6'
+}
+
+dependencies {
+    implementation "se.arkalix:kalix-base:$versionArkalix"
+    implementation "se.arkalix:kalix-core-plugins:$versionArkalix"
+    annotationProcessor "se.arkalix:kalix-processors:$versionArkalix"
+}
