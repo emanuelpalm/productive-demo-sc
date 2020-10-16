@@ -6,7 +6,7 @@ plugins {
 mainClassName = "${project.group}.plant.Main"
 
 ext {
-    versionArkalix = '0.4.6'
+    versionArkalix = '0.5.0'
     versionSlf4j = '1.7.30'
 }
 
