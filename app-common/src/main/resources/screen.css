@@ -116,8 +116,7 @@ body,
 }
 
 .InputField {
-    border: 0.1rem solid #CCC;
-    border-color: #93bfc1;
+    border: 0.1rem solid #93bfc1;
     border-radius: 0.15rem;
     color: #13a3aa;
     padding: 0.1rem;
@@ -148,9 +147,21 @@ body,
     content: '}';
 }
 
-.InputField.error {
-    border-color: #cc1f17;
-    color: #cc1f17;
+.InputField.empty.error {
+    border-color: #cc1f17 !important;
+    background-color: #fff6f5 !important;
+    color: #9f0a03 !important;
+}
+
+.InputSelector {
+    color: #13a3aa;
+    font-size: 1.25rem;
+    padding: 0.1rem;
+}
+
+.OfferDialog .InputSelector,
+.OfferDialog .InputSelector > option {
+    font-size: 1.25rem;
 }
 
 .Layout {

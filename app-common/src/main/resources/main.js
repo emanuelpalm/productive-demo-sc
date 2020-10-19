@@ -6,14 +6,24 @@ class Publisher {
     }
 
     publish(topic, data) {
-        for (const [topic0, callback] of this.subscriptions) {
-            if (topic === topic0) {
-                try {
-                    callback(data);
+        let isReceived = false;
+        try {
+            for (const [topic0, callback] of this.subscriptions) {
+                if (topic === topic0) {
+                    try {
+                        isReceived = true;
+                        callback(data);
+                    }
+                    catch (error) {
+                        console.log("Failed to publish '" + topic + "' to one subscriber", error);
+                    }
                 }
-                catch (error) {
-                    console.log("Failed to publish '" + topic + "' to one subscriber", error);
-                }
+            }
+        }
+        finally {
+            if (!isReceived) {
+                console.log("Event with topic '" + topic + "' and data (" +
+                    data + ") not received by any subscriber");
             }
         }
     }
@@ -31,6 +41,42 @@ class Publisher {
 
 const global = {
     publisher: new Publisher(),
+    
+    publish: (...args) => global.publisher.publish(...args),
+    subscribe: (...args) => global.publisher.subscribe(...args),
+    unsubscribe: (...args) => global.publisher.unsubscribe(...args),
+
+    me: "plant",
+
+    parties: [
+        {
+            name: "plant",
+            label: "Final Assembly Plant"
+        },
+        {
+            name: "carrier",
+            label: "Carrier"
+        },
+        {
+            name: "supplier",
+            label: "Component Supplier"
+        }
+    ],
+
+    templates: [
+        {
+            name: "component-order.txt",
+            label: "Component Order",
+            text: "" +
+                "Final Assembly Plant Inc. hereby makes an order\n" +
+                "for {quantity} units of \"{articleId}\" at the\n" +
+                "unit price of {unitPrice} EUR from Component\n" +
+                "Supplier Inc.\n" +
+                "\n" +
+                "The units are to be delivered by Carrier Inc.\n" +
+                "to the Final Assembly Plant at {timeOfDelivery}.\n",
+        },
+    ],
 };
 
 class Widget {
@@ -113,12 +159,17 @@ class Widget {
     removeClass(className) {
         this.$element.classList.remove(className);
     }
+
+    on(eventName, callback) {
+        this.$element.addEventListener(eventName, callback);
+        return { cancel: () => this.$element.removeEventListener(eventName, callback) };
+    }
 }
 
 class Action extends Widget {
     constructor(className, label, callback) {
         super("a", {"class": "Action " + className}, [label]);
-        this.$element.addEventListener("click", () => {
+        this.on("click", () => {
             try {
                 document.getSelection().removeAllRanges();
             }
@@ -146,7 +197,14 @@ class Card extends Widget {
         const map = new Map();
         for (const nodeOrWidget of this.body) {
             if (nodeOrWidget instanceof InputField) {
-                map.set(nodeOrWidget.name, nodeOrWidget.getValue());
+                const value = nodeOrWidget.getValue();
+                if ((value || "").trim().length === 0) {
+                    nodeOrWidget.addClass("error");
+                }
+                else {
+                    nodeOrWidget.removeClass("error");
+                }
+                map.set(nodeOrWidget.name, value);
             }
         }
         return map;
@@ -166,7 +224,7 @@ class InputField extends Widget {
             this.isEmpty = true;
         }
         this.setEditable(isEditable); 
-        this.$element.addEventListener("keypress", event => {
+        this.on("keypress", event => {
             if (event.keyCode === 10 || event.keyCode === 13) {
                 event.preventDefault();
                 this.$element.blur();
@@ -184,7 +242,7 @@ class InputField extends Widget {
             this.addClass("empty");
         }
         if (isEditable) {
-            this._focusin = this.$element.addEventListener("focusin", () => {
+            this._focusin = this.on("focusin", () => {
                 if (this.isEmpty) {
                     this.$element.innerText = "";
                     this.removeClass("empty");
@@ -199,7 +257,7 @@ class InputField extends Widget {
                     selection.addRange(range);
                 }
             });
-            this._focusout = this.$element.addEventListener("focusout", () => {
+            this._focusout = this.on("focusout", () => {
                 if ((this.$element.innerText || "").trim().length === 0) {
                     this.$element.innerText = this.label;
                     this.addClass("empty");
@@ -213,15 +271,38 @@ class InputField extends Widget {
         }
         else {
             if (this._focusin) {
-                this.$element.removeEventListener("focusin", this._focusin);
+                this._focusin.cancel();
                 delete this._focusin;
             }
             if (this._focusout) {
-                this.$element.removeEventListener("focusout", this._focusout);
+                this._focusout.cancel();
                 delete this._focusout;   
             }
         }
         this.$element.setAttribute("contentEditable", isEditable ? "true" : "false");
+    }
+}
+
+class InputSelector extends Widget {
+    constructor(name, label, alternatives, selected = null) {
+        super("select", {"class": "InputSelector " + name});
+        this.$element.name = name;
+
+        const options = [];
+        for (let i = 0; i < alternatives.length; i++) {
+            const alternative = alternatives[i];
+            let widget = new Widget("option", {}, [alternative.label]);
+            widget.$element.value = alternative.name;
+            if (i === selected) {
+                widget.$element.selected = "selected";
+            }
+            options.push(widget);
+        }
+        this.addChildren(options);
+    }
+
+    getValue() {
+        return this.$element.value || "";
     }
 }
 
@@ -257,15 +338,6 @@ class Modal extends Widget {
 
     hide() {
         this.removeClass("visible");
-        this._setDisplayNoneAfterDelay();
-    }
-
-    show() {
-        this.addClass("visible");
-        this.$element.style.display = this._display;
-    }
-
-    _setDisplayNoneAfterDelay(value) {
         if (this._delay > 0) {
             setTimeout(() => this.$element.style.display = "none", this._delay * 1000);
         }
@@ -273,13 +345,18 @@ class Modal extends Widget {
             this.$element.style.display = value;
         }
     }
+
+    show() {
+        this.addClass("visible");
+        this.$element.style.display = this._display;
+    }
 }
 
 class Status extends Widget {
     constructor() {
         super("div", {"class": "Status hidden"});
         this.name = "hidden";
-        this.$element.addEventListener("click", () => this.setHidden());
+        this.on("click", () => this.setHidden());
     }
 
     set(className, text) {
@@ -315,17 +392,49 @@ class Status extends Widget {
 class Template extends Card {
     constructor(id, label, text) {
         super("Template", label, templateTextToStringsAndWidgets(text, false), [
-            new Action("offer", "New Offer", () => global.publisher.publish("dialog.show.offer", {id, label, text})),
+            new Action("offer", "New Offer", () => global.publish("dialog.show.offer", {id, label, text})),
         ]);
     }
 }
 
 class OfferDialog extends Card {
     constructor(id, label, text) {
-        super("OfferDialog", label, templateTextToStringsAndWidgets(text, true), [
-            new Action("submit", "Submit Offer", () => global.publisher.publish("offer.submit", this.getInput())),
-            new Action("cancel", "Cancel", () => global.publisher.publish("dialog.hide")),
+        let receiver;
+        const labelWithPartySelector = new Widget("span", {}, [
+            "Offer ", new Widget("i", {}, [label]), " to ", receiver = new InputSelector(
+                "receiver", "receiver", global.parties.filter(party => party.name !== global.me)
+            )
         ]);
+        super("OfferDialog", labelWithPartySelector, templateTextToStringsAndWidgets(text, true), [
+            new Action("submit", "Submit Offer", () => {
+                const submission = this.validateAndCollectSubmission();
+                if (submission) {
+                    global.publish("offer.submit", submission);
+                    global.publish("dialog.hide");
+                }
+            }),
+            new Action("cancel", "Cancel", () => global.publish("dialog.hide")),
+        ]);
+        this.receiver = receiver;
+    }
+
+    validateAndCollectSubmission() {
+        let hasError = false;
+
+        const receiver = this.receiver.getValue();
+        if (!receiver) {
+            this.receiver.addClass("error");
+            hasError = true;
+        }
+        const contract = this.getInput();
+        for (const [key, value] of contract.entries()) {
+            if ((value || "").trim().length === 0) {
+                hasError = true;
+            }
+        }
+        return hasError
+            ? null
+            : {receiver, contract};
     }
 }
 
@@ -360,43 +469,32 @@ function templateTextToStringsAndWidgets(text, areEditable) {
     return result;
 }
 
-const co = {
-    id: "component-order.txt",
-    label: "Component Order",
-    text: "" +
-        "Final Assembly Plant Inc. hereby makes an order\n" +
-        "for {quantity} units of \"{articleId}\" at the\n" +
-        "unit price of {unitPrice} EUR from Component\n" +
-        "Supplier Inc.\n" +
-        "\n" +
-        "The units are to be delivered by Carrier Inc.\n" +
-        "to the Final Assembly Plant at {timeOfDelivery}.\n",
-};
-
 function main() {
 
     const root = new Widget(document.getElementById("root"));
     const modal = new Modal(document.getElementById("modal"));
 
-    global.publisher.subscribe("dialog.hide", () => {
+    global.subscribe("dialog.hide", () => {
         modal.hide();
     });
 
-    global.publisher.subscribe("dialog.show.offer", template => {
+    global.subscribe("dialog.show.offer", template => {
         modal.clearChildren();
         modal.addChild(new OfferDialog(template.id, template.label, template.text));
         modal.show();
     });
 
-    global.publisher.subscribe("offer.submit", contract => {
+    global.subscribe("offer.submit", contract => {
         console.log(contract);
     });
 
     let card;
 
-    const layoutTemplates = new Layout("templates", "Contract Templates", [
-        new Template(co.id, co.label, co.text),
-    ]);
+    const layoutTemplates = new Layout("templates", "Contract Templates",
+        global.templates.reduce((templates, template) => {
+            templates.push(new Template(template.name, template.label, template.text));
+            return templates;
+        }, []));
     const layoutLog = new Layout("log", "Event Log", [
         card = new Card("offer", "Offer", [
             "Hello ",
