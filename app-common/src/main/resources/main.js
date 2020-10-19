@@ -182,12 +182,12 @@ class Action extends Widget {
 }
 
 class Card extends Widget {
-    constructor(className, label, children = [], actions = []) {
+    constructor(className, label, children = [], footer = []) {
         super("div", {"class": "Card " + className});
         this.head = new Widget("div", {"class": "Head"}, [label]);
         this.body = new Widget("div", {"class": "Body"}, children);        
         this.foot = new Widget("div", {"class": "Foot"}, [
-            this.actions = new Widget("div", {"class": "Actions"}, actions),
+            this.left = new Widget("div", {"class": "Left"}, footer),
             this.status = new Status("hidden"),
         ])
         this.addChildren(this.head, this.body, this.foot);
@@ -352,6 +352,47 @@ class Modal extends Widget {
     }
 }
 
+class OfferDialog extends Card {
+    constructor(id, label, text) {
+        let receiver;
+        const labelWithPartySelector = new Widget("span", {}, [
+            "Offer ", new Widget("i", {}, [label]), " to ", receiver = new InputSelector(
+                "receiver", "receiver", global.parties.filter(party => party.name !== global.me)
+            )
+        ]);
+        super("OfferDialog", labelWithPartySelector, templateTextToStringsAndWidgets(text, {}, true), [
+            new Action("submit", "Submit Offer", () => {
+                const submission = this.validateAndCollectSubmission();
+                if (submission) {
+                    global.publish("offer.submit", submission);
+                    global.publish("dialog.hide");
+                }
+            }),
+            new Action("cancel", "Cancel", () => global.publish("dialog.hide")),
+        ]);
+        this.receiver = receiver;
+    }
+
+    validateAndCollectSubmission() {
+        let hasError = false;
+
+        const receiver = this.receiver.getValue();
+        if (!receiver) {
+            this.receiver.addClass("error");
+            hasError = true;
+        }
+        const contract = this.getInput();
+        for (const [key, value] of contract.entries()) {
+            if ((value || "").trim().length === 0) {
+                hasError = true;
+            }
+        }
+        return hasError
+            ? null
+            : {receiver, contract};
+    }
+}
+
 class Status extends Widget {
     constructor() {
         super("div", {"class": "Status hidden"});
@@ -389,56 +430,23 @@ class Status extends Widget {
     }
 }
 
+class Contract extends Card {
+    constructor(id, label, data, text, signatories) {
+        super("Contract", label, templateTextToStringsAndWidgets(text, data, false), [
+            new Widget("span", {"class": "Label"}, ["Signatories:"]),
+            ...signatories.map(signatory => new Widget("span", {"class": "Signatory"}, [signatory]))]);
+    }
+}
+
 class Template extends Card {
     constructor(id, label, text) {
-        super("Template", label, templateTextToStringsAndWidgets(text, false), [
+        super("Template", label, templateTextToStringsAndWidgets(text, {}, false), [
             new Action("offer", "New Offer", () => global.publish("dialog.show.offer", {id, label, text})),
         ]);
     }
 }
 
-class OfferDialog extends Card {
-    constructor(id, label, text) {
-        let receiver;
-        const labelWithPartySelector = new Widget("span", {}, [
-            "Offer ", new Widget("i", {}, [label]), " to ", receiver = new InputSelector(
-                "receiver", "receiver", global.parties.filter(party => party.name !== global.me)
-            )
-        ]);
-        super("OfferDialog", labelWithPartySelector, templateTextToStringsAndWidgets(text, true), [
-            new Action("submit", "Submit Offer", () => {
-                const submission = this.validateAndCollectSubmission();
-                if (submission) {
-                    global.publish("offer.submit", submission);
-                    global.publish("dialog.hide");
-                }
-            }),
-            new Action("cancel", "Cancel", () => global.publish("dialog.hide")),
-        ]);
-        this.receiver = receiver;
-    }
-
-    validateAndCollectSubmission() {
-        let hasError = false;
-
-        const receiver = this.receiver.getValue();
-        if (!receiver) {
-            this.receiver.addClass("error");
-            hasError = true;
-        }
-        const contract = this.getInput();
-        for (const [key, value] of contract.entries()) {
-            if ((value || "").trim().length === 0) {
-                hasError = true;
-            }
-        }
-        return hasError
-            ? null
-            : {receiver, contract};
-    }
-}
-
-function templateTextToStringsAndWidgets(text, areEditable) {
+function templateTextToStringsAndWidgets(text, data = {}, areEditable = false) {
     const result = [];
     let t0 = 0;
     let t1 = 0;
@@ -451,7 +459,9 @@ function templateTextToStringsAndWidgets(text, areEditable) {
                 if (text.charAt(t1) === "}") {
                     const name = text.substring(t0, t1++);
                     t0 = t1;
-                    result.push(new InputField(name, name, null, areEditable));
+
+                    const value = data[name];
+                    result.push(new InputField(name, name, value, areEditable));
                     break;
                 }
                 else {
@@ -507,7 +517,14 @@ function main() {
             new Action("y", "Reject", () => console.log("What!?")),
         ])
     ]);
-    const layoutContracts = new Layout("contracts", "Contracts");
+    const layoutContracts = new Layout("contracts", "Contracts", [
+        new Contract(global.templates[0].name, global.templates[0].label, {
+            quantity: 10,
+            articleId: "ABC-XYZ",
+            unitPrice: 230,
+            timeOfDelivery: "2020-10-31 14:30:05"
+        }, global.templates[0].text, ["Assembly Plant Inc.", "Supplier Inc."]),
+    ]);
 
     root.addChildren(layoutTemplates, layoutLog, layoutContracts);
 

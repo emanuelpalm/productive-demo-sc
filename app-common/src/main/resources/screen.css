@@ -92,22 +92,33 @@ body,
     transition-property: height;
 }
 
-.Card > .Foot > .Actions {
+.Card > .Foot > .Left {
     display: flex;
+    align-items: center;
 }
 
-.Card > .Foot > .Actions > .Action {
+.Card > .Foot > .Left > * {
+    font-size: 0.9rem;
+    margin: 0.5rem 0 0.5rem 0.5rem;
+}
+
+.Card > .Foot > .Left > .Action {
     background-color: #888;
     border-radius: 0.2rem;
     color: white;
-    font-size: 0.9rem;
-    margin: 0.5rem 0 0.5rem 0.5rem;
     padding: 0.33rem 0.5rem;
     text-align: center;
 }
 
-.Card > .Foot > .Actions > .Action:hover {
+.Card > .Foot > .Left > .Action:hover {
     background-color: #626573;
+}
+
+.Card > .Foot > .Left > .Signatory {
+    border: 0.1rem solid #888;
+    border-radius: 0.2rem;
+    padding: 0.33rem 0.5rem;
+    text-align: center;
 }
 
 .Card > .Foot > .Status {
@@ -130,7 +141,7 @@ body,
 .InputField[contenteditable="false"] {
     background-color: #F3F3F3;
     border-color: #AAA;
-    color: #888;
+    color: #666;
 }
 
 .InputField.empty[contenteditable="false"] {
