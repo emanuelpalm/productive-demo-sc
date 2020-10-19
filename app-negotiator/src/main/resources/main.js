@@ -794,20 +794,20 @@ function main() {
                     }
                     let widget;
                     switch (entry.type) {
-                    case "offer.accept":
+                    case "OFFER_ACCEPT":
                         widget = new AcceptReceived(entry.id, entry.offer);
                         break;
-                    case "offer.submit":
+                    case "OFFER_SUBMIT":
                         widget = new OfferReceived(entry.id, entry.offer);
                         break;
-                    case "offer.counter":
+                    case "OFFER_COUNTER":
                         widget = new CounterOfferReceived(entry.id, entry.offer);
                         break;
-                    case "offer.reject":
+                    case "OFFER_REJECT":
                         widget = new RejectReceived(entry.id, entry.offer);
                         break;
-                    case "contract":
-                        widget = new ContractReceived(entry.id, entry.label, entry.signatories, entry.sender);
+                    case "CONTRACT":
+                        widget = new ContractReceived(entry.id, entry.contract.label, entry.contract.signatories, entry.contract.sender);
                         break;
                     default:
                         console.log("Received entry with unexpected type", entry);

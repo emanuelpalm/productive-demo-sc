@@ -34,7 +34,7 @@ body,
 }
 
 #root > .Layout.inbox > h1 {
-    background-image: url("messager.svg");
+    background-image: url("messenger.svg");
 }
 
 #root > .Layout.contracts > h1 {
