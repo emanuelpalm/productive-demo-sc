@@ -347,8 +347,8 @@ class Modal extends Widget {
     }
 
     show() {
-        this.addClass("visible");
         this.$element.style.display = this._display;
+        setTimeout(() => this.addClass("visible"));
     }
 }
 
