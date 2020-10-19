@@ -63,20 +63,99 @@ const global = {
         }
     ],
 
-    templates: [
-        {
-            name: "component-order.txt",
-            label: "Component Order",
-            text: "" +
-                "Final Assembly Plant Inc. hereby makes an order\n" +
-                "for {quantity} units of \"{articleId}\" at the\n" +
-                "unit price of {unitPrice} EUR from Component\n" +
-                "Supplier Inc.\n" +
-                "\n" +
-                "The units are to be delivered by Carrier Inc.\n" +
-                "to the Final Assembly Plant at {timeOfDelivery}.\n",
-        },
-    ],
+    partyByName(name) {
+        for (const party of global.parties) {
+            if (party.name === name) {
+                return party;
+            }
+        }
+        throw "No party named '" + name + "' is known"; 
+    },
+
+    deleteJson: (url, headers) => {
+        return global.requestJson("DELETE", url, headers || {}, undefined);
+    },
+
+    getJson: (url, headers) => {
+        return global.requestJson("GET", url, headers || {}, undefined);
+    },
+
+    postJson: (url, headers, payload) => {
+        if (typeof payload === "undefined") {
+            payload = headers;
+            headers = {};
+        }
+        return global.requestJson("POST", url, headers || {}, payload);
+    },
+
+    requestJson: (method, url, headers, payload) => {
+        if (!headers) {
+            headers = {accept: "application/json"};
+        }
+        else if (!headers.accept) {
+             headers.accept = "application/json";
+        }
+        if (payload && typeof payload === "object") {
+            payload = JSON.stringify(payload);
+        }
+        if (payload) {
+            headers["content-type"] = "application/json";
+        }
+        return global.request(method, url, headers, payload)
+            .then((xhr) => {
+                if (typeof xhr.responseText === "undefined" || xhr.responseText.length === 0) {
+                    return null;
+                }
+                var contentType = (xhr.getResponseHeader("content-type") || "").trim().toLowerCase();
+                if (!contentType.startsWith("application/json")) {
+                    throw {
+                        "name": "badResponseType",
+                        "message": "Expected JSON-formatted response from server; received `" + contentType + "`.",
+                        "data": xhr
+                    };
+                }
+                return JSON.parse(xhr.responseText);
+            });
+    },
+
+    request: (method, url, headers, payload) => {
+        return new Promise((resolve, reject) => {
+            var xhr = new XMLHttpRequest();
+            xhr.timeout = 3000; // 3 seconds.
+            xhr.open(method, url);
+            xhr.addEventListener("load", function() {
+                if (this.status >= 200 && this.status <= 299) {
+                    resolve(this);
+                }
+                else {
+                    reject({
+                        "name": "badResponseStatus",
+                        "message": "An unexpected status code was received from server (" + this.status + ").",
+                        "data": this
+                    });
+                }
+            });
+            xhr.addEventListener("error", function() {
+                reject({
+                    "name": "error",
+                    "message": "Failed to send request to server.",
+                    "data": this
+                });
+            });
+            xhr.addEventListener("timeout", function() {
+                reject({
+                    "name": "timeout",
+                    "message": "Server failed to respond to sent request within " + (xhr.timeout / 1000.0) +
+                        " seconds.",
+                    "data": this
+                });
+            });
+            for (var [key, value] of Object.entries(headers)) {
+                xhr.setRequestHeader(key, value.toString());
+            }
+            xhr.send(payload);
+        });
+    },
 };
 
 class Widget {
@@ -124,7 +203,7 @@ class Widget {
         if (!$node) {
             return;
         }
-        this.$element.prependChild($node);
+        this.$element.prepend($node);
     }
 
     _widgetOrNodeToNode(widgetOrNode) {
@@ -139,6 +218,28 @@ class Widget {
         }
         else {
             return document.createTextNode(widgetOrNode);
+        }
+    }
+
+    getFirstChildMatching(predicate) {
+        for (let child of this) {
+            if (predicate(child)) {
+                return child;
+            }
+        }
+    }
+
+    removeFirstChildMatching(predicate) {
+        let i = 0;
+        for (let child of this) {
+            if (predicate(child)) {
+                if (child instanceof Widget) {
+                    child = child.$element;
+                }
+                child.remove();
+                break;
+            }
+            i++;
         }
     }
 
@@ -366,17 +467,54 @@ class Modal extends Widget {
     }
 }
 
+class CounterOfferDialog extends Card {
+    constructor(id, offer) {
+        const labelWithReceiver = new Widget("span", {}, [
+            "Make Counter-Offer ", new Widget("i", {}, [template.label]), " for ", new InputField(
+                "receiver", "receiver", global.partyByName(offer.receiver).label, false
+            ),
+        ]);
+        super("CounterOfferDialog", labelWithReceiver, templateTextToStringsAndWidgets(template.text, offer.contract, true), [
+            new Action("submit", "Submit Counter-Offer", () => {
+                const submission = this.validateAndCollectSubmission();
+                if (submission) {
+                    global.publish("offer.counter", submission);
+                    global.publish("dialog.hide");
+                }
+            }),
+            new Action("cancel", "Cancel", () => global.publish("dialog.hide")),
+        ]);
+        this.offer = offer;
+    }
+
+    validateAndCollectSubmission() {
+        let hasError = false;
+
+        const receiver = this.offer.receiver.getValue();
+        const contract = this.getInput();
+        for (const [key, value] of contract.entries()) {
+            if ((value || "").trim().length === 0) {
+                hasError = true;
+            }
+        }
+        return hasError
+            ? null
+            : {receiver, contract, template: this.offer.template};
+    }
+}
+
 class OfferDialog extends Card {
-    constructor(id, label, text) {
+    constructor(template) {
         let receiver;
         const labelWithPartySelector = new Widget("span", {}, [
-            "Offer ", new Widget("i", {}, [label]), " to ", receiver = new InputSelector(
+            "Offer ", new Widget("i", {}, [template.label]), " to ", receiver = new InputSelector(
                 "receiver", "receiver", global.parties.filter(party => party.name !== global.me)
             )
         ]);
-        super("OfferDialog", labelWithPartySelector, templateTextToStringsAndWidgets(text, {}, true), [
+        super("OfferDialog", labelWithPartySelector, templateTextToStringsAndWidgets(template.text, {}, true), [
             new Action("submit", "Submit Offer", () => {
                 const submission = this.validateAndCollectSubmission();
+
                 if (submission) {
                     global.publish("offer.submit", submission);
                     global.publish("dialog.hide");
@@ -385,6 +523,7 @@ class OfferDialog extends Card {
             new Action("cancel", "Cancel", () => global.publish("dialog.hide")),
         ]);
         this.receiver = receiver;
+        this.template = template;
     }
 
     validateAndCollectSubmission() {
@@ -403,7 +542,7 @@ class OfferDialog extends Card {
         }
         return hasError
             ? null
-            : {receiver, contract};
+            : {receiver, contract, template: this.template};
     }
 }
 
@@ -473,14 +612,117 @@ class ContractReceived extends Card {
             new Widget("span", {"class": "value"}, signatories.map(signatory => {
                 return new Widget("span", {"class": "signatory"}, [signatory]);
             })),
+        ], [
+            new Widget("span", {"class": "Label"}, [
+                "Saved to 'Contracts' section."
+            ]),
         ]);
     }
 }
 
+class MessageSent extends Card {
+    constructor(id, offer, className, actionLabel, directionLabel, message) {
+        const timestamp = new Widget("div", {"class": "timestamp"}, [new Date().toISOString()]);
+        const labelWithIdTimestampAndReceiver = new Widget("div", {}, [
+            timestamp,
+            new Widget("div", {}, [
+                actionLabel + " ",
+                new Widget("i", {}, [offer.template.label]),
+                new Widget("span", {"class":"meta"}, [" [", id, "]"]),
+                " " + directionLabel + " ",
+                new Widget ("i", {}, [global.partyByName(offer.receiver).label])
+            ]),
+        ]);
+        const text = templateTextToStringsAndWidgets(offer.template.text, offer.contract, false);
+        super(className, labelWithIdTimestampAndReceiver, text, message ? [
+            new Widget("span", {"class": "Label"}, [message]),
+        ] : null);
+        this.id = id;
+    }
+}
+
+class AcceptSent extends MessageSent {
+    constructor(id, offer) {
+        super(id, offer, "AcceptSent", "Accepted", "from", "Accepted contract saved to 'Contracts' section.");
+    }
+}
+
+class OfferSent extends MessageSent {
+    constructor(id, offer) {
+        super(id, offer, "OfferSent", "Offered", "to", "Awaiting response ...");
+    }
+}
+
+class CounterOfferSent extends MessageSent {
+    constructor(id, offer) {
+        super(id, offer, "CounterOfferSent", "Countered ", "from", "Awaiting response ...")
+    }
+}
+
+class RejectSent extends MessageSent {
+    constructor(id, offer) {
+        super(id, offer, "RejectSent", "Rejected", "from");
+    }
+}
+
+class MessageReceived extends Card {
+    constructor(id, offer, className, actionName, children) {
+        const timestamp = new Widget("div", {"class": "timestamp"}, [new Date().toISOString()]);
+        const labelWithIdTimestampAndSender = new Widget("div", {}, [
+            timestamp,
+            new Widget("div", {}, [
+                new Widget ("i", {}, [global.partyByName(offer.sender).label]),
+                " " + actionName + " ",
+                new Widget("i", {}, [offer.template.label]),
+                new Widget("span", {"class":"meta"}, [" [", id, "]"]),
+                " from ",
+                
+            ]),
+        ]);
+        const text = templateTextToStringsAndWidgets(offer.template.text, offer.contract, false);
+        super(className, labelWithIdTimestampAndReceiver, text, children);
+        this.id = id;
+    }
+}
+
+class AcceptReceived extends MessageReceived {
+    constructor(id, offer) {
+        super(id, offer, "AcceptReceived", "Accepted", [
+            new Widget("span", {"class": "Label"}, ["Accepted contract saved to 'Contracts' section."])
+        ]);
+    }
+}
+
+class OfferReceived extends MessageReceived {
+    constructor(id, offer) {
+        super(id, offer, "OfferReceived", "Offered", [
+            new Action("accept", "Accept", () => global.publish("offer.accept", {id, offer})),
+            new Action("counter", "Counter", () => global.publish("dialog.show.counterOffer", {id, offer})),
+            new Action("reject", "Reject", () => global.publish("offer.reject", {id, offer})),
+        ]);
+    }
+}
+
+class CounterOfferReceived extends MessageReceived {
+    constructor(id, offer) {
+        super(id, offer, "CounterOfferReceived", "Countered", [
+            new Action("accept", "Accept", () => global.publish("offer.accept", {id, offer})),
+            new Action("counter", "Counter", () => global.publish("dialog.show.counterOffer", {id, offer})),
+            new Action("reject", "Reject", () => global.publish("offer.reject", {id, offer})),
+        ]);
+    }
+}
+
+class RejectReceived extends MessageReceived {
+    constructor(id, offer) {
+        super(id, offer, "RejectReceived", "Rejected");
+    }
+}
+
 class Template extends Card {
-    constructor(id, label, text) {
-        super("Template", label, templateTextToStringsAndWidgets(text, {}, false), [
-            new Action("offer", "New Offer", () => global.publish("dialog.show.offer", {id, label, text})),
+    constructor(template) {
+        super("Template", template.label, templateTextToStringsAndWidgets(template.text, {}, false), [
+            new Action("offer", "New Offer", () => global.publish("dialog.show.offer", template)),
         ]);
     }
 }
@@ -499,7 +741,7 @@ function templateTextToStringsAndWidgets(text, data = {}, areEditable = false) {
                     const name = text.substring(t0, t1++);
                     t0 = t1;
 
-                    const value = data[name];
+                    const value = data instanceof Map ? data.get(name) : data[name];
                     result.push(new InputField(name, name, value, areEditable));
                     break;
                 }
@@ -522,43 +764,126 @@ function main() {
     const root = new Widget(document.getElementById("root"));
     const modal = new Modal(document.getElementById("modal"));
 
+    const layoutTemplates = new Layout("templates", "Contract Templates");
+    const layoutInbox = new Layout("inbox", "Negotiation Inbox");
+    const layoutContracts = new Layout("contracts", "Contracts");
+    root.appendChildren(layoutTemplates, layoutInbox, layoutContracts);
+
+    const refresh = () => {
+        console.log("Refreshing!");
+
+        global.getJson("/ui/me")
+            .then(me => global.me = me.name);
+
+        global.getJson("/ui/parties")
+            .then(parties => global.parties = parties);
+
+        global.getJson("/ui/templates")
+            .then(templates => {
+                layoutTemplates.clearChildren();
+                layoutTemplates.appendChildren(templates);
+            });
+
+        global.deleteJson("/ui/inbox/entries")
+            .then(entries => {
+                for (const entry of entries) {
+                    if (entry.id) {
+                        layoutInbox.body.removeFirstChildMatching(child => {
+                            return child instanceof Widget && child.id === entry.id;
+                        });
+                    }
+                    let widget;
+                    switch (entry.type) {
+                    case "offer.accept":
+                        widget = new AcceptReceived(entry.id, entry.offer);
+                        break;
+                    case "offer.submit":
+                        widget = new OfferReceived(entry.id, entry.offer);
+                        break;
+                    case "offer.counter":
+                        widget = new CounterOfferReceived(entry.id, entry.offer);
+                        break;
+                    case "offer.reject":
+                        widget = new RejectReceived(entry.id, entry.offer);
+                        break;
+                    case "contract":
+                        widget = new ContractReceived(entry.id, entry.label, entry.signatories, entry.sender);
+                        break;
+                    default:
+                        console.log("Received entry with unexpected type", entry);
+                        continue;
+                    }
+                    layoutInbox.body.prependChild(widget);
+                }
+            });
+    };
+    refresh();
+    setInterval(refresh, 10000);
+    document.getElementById("refresh")
+        .addEventListener("click", () => global.publish("refresh"));
+
     global.subscribe("dialog.hide", () => {
         modal.hide();
     });
 
     global.subscribe("dialog.show.offer", template => {
         modal.clearChildren();
-        modal.appendChild(new OfferDialog(template.id, template.label, template.text));
+        modal.appendChild(new OfferDialog(template));
         modal.show();
     });
 
-    global.subscribe("offer.submit", contract => {
-        console.log(contract);
+    global.subscribe("dialog.show.counterOffer", entry => {
+        modal.clearChildren();
+        modal.appendChild(new CounterOfferDialog(entry.id, entry.offer));
+        modal.show();
     });
 
-    let card;
+    global.subscribe("offer.submit", offer => {
+        global.postJson("/ui/offers", {}, offer)
+            .then(response => {
+                layoutInbox.body.prependChild(new OfferSent(response.id, offer));
+            });
+    });
 
-    const layoutTemplates = new Layout("templates", "Contract Templates",
-        global.templates.reduce((templates, template) => {
-            templates.push(new Template(template.name, template.label, template.text));
-            return templates;
-        }, []));
-    const layoutInbox = new Layout("inbox", "Negotiation Inbox", [
-        new ContractReceived("1023123", "Component Order", ["Assembly Plant Inc.", "Supplier Inc."], "Supplier Inc.")
-    ]);
-    const layoutContracts = new Layout("contracts", "Contracts", [
-        new Contract(global.templates[0].name, global.templates[0].label, {
-            quantity: 10,
-            articleId: "ABC-XYZ",
-            unitPrice: 230,
-            timeOfDelivery: "2020-10-31 14:30:05"
-        }, global.templates[0].text, ["Assembly Plant Inc.", "Supplier Inc."]),
-    ]);
+    const handleEntryError = error => {
+        const entry0 = layoutInbox.getFirstChildMatching(child => {
+            return child instanceof Widget && child.id === entry.id;
+        });
+        if (entry0) {
+            entry0.status.setError(JSON.stringify(error));
+        }
+        else {
+            console.log(error);
+        }
+    };
 
-    root.appendChildren(layoutTemplates, layoutInbox, layoutContracts);
+    global.subscribe("offer.accept", entry => {
+        layoutInbox.body.removeFirstChildMatching(child => {
+            return child instanceof Widget && child.id === entry.id;
+        });
+        layoutInbox.body.prependChild(new AcceptSent(entry.id, entry.offer));
+        global.postJson("/ui/acceptances", {}, entry)
+            .catch(handleEntryError);
+    });
 
-    setTimeout(() => {
-        card.status.setError("Something bad is going on here!");
-    }, 1000);
+    global.subscribe("offer.counter", entry => {
+        layoutInbox.body.removeFirstChildMatching(child => {
+            return child instanceof Widget && child.id === entry.id;
+        });
+        layoutInbox.body.prependChild(new CounterOfferSent(entry.id, entry.offer));
+        global.postJson("/ui/counter-offers", {}, entry)
+            .catch(handleEntryError);
+    });
+
+    global.subscribe("offer.reject", entry => {
+        layoutInbox.body.removeFirstChildMatching(child => {
+            return child instanceof Widget && child.id === entry.id;
+        });
+        layoutInbox.body.prependChild(new RejectSent(entry.id, entry.offer));
+        global.postJson("/ui/rejections", {}, entry)
+            .catch(handleEntryError);
+    });
+
+    global.subscribe("refresh", refresh);
 }
 window.addEventListener("load", main);

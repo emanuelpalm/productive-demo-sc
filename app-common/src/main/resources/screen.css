@@ -73,8 +73,36 @@ body,
     transform: translate(0, 0);
 }
 
+#refresh {
+    background-color: #AAA;
+    border-radius: 0.2rem;
+    color: white;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0.33rem 0.5rem;
+    text-align: center;
+    position: absolute;
+    right: 0.5rem;
+    top: 0.5rem;
+}
+
+#refresh:hover {
+    background-color: #626573;
+}
+
+
+.inbox .timestamp {
+    color: #888;
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+}
+
+.inbox .Head i {
+    color: #13a3aa;
+}
+
 .meta {
-    color: #AAA;
+    color: #888;
 }
 
 .Action {
@@ -146,16 +174,6 @@ body,
 .Card > .Foot > .Status {
     font-size: 0.9rem;
     min-width: 10rem;
-}
-
-.ContractReceived > .Head .timestamp {
-    color: #888;
-    font-size: 0.8rem;
-    margin-bottom: 0.25rem;
-}
-
-.ContractReceived > .Head i {
-    color: #13a3aa;
 }
 
 .ContractReceived > .Body {
