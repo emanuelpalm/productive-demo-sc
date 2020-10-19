@@ -1,1 +1,1 @@
-include ':app-carrier', ':app-common', ':app-plant', ':app-supplier'
+include ':app-negotiator', ':app-forecaster'
