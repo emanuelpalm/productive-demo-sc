@@ -23,6 +23,24 @@ body,
     border-right: 0.15rem solid #CCC;
 }
 
+#root > .Layout > h1 {
+    background-position: center 0.4rem;
+    background-repeat: no-repeat;
+    padding-top: 3.4rem;
+}
+
+#root > .Layout.templates > h1 {
+    background-image: url("bank.svg");
+}
+
+#root > .Layout.inbox > h1 {
+    background-image: url("messager.svg");
+}
+
+#root > .Layout.contracts > h1 {
+    background-image: url("ledger.svg");
+}
+
 #modal {
     align-items: center;
     background-color: #00000060;
@@ -53,6 +71,10 @@ body,
 #modal.visible > * {
     opacity: 1.0;
     transform: translate(0, 0);
+}
+
+.meta {
+    color: #AAA;
 }
 
 .Action {
@@ -124,6 +146,30 @@ body,
 .Card > .Foot > .Status {
     font-size: 0.9rem;
     min-width: 10rem;
+}
+
+.ContractReceived > .Head .timestamp {
+    color: #888;
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+}
+
+.ContractReceived > .Head i {
+    color: #13a3aa;
+}
+
+.ContractReceived > .Body {
+    display: grid;
+    grid-template-columns: 8rem auto;
+}
+
+.ContractReceived > .Body .label {
+    color: #888;
+}
+
+.ContractReceived > .Body .signatory:not(:last-child)::after {
+    content: ",";
+    margin-inline-end: 1rem;
 }
 
 .InputField {

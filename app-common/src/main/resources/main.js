@@ -94,28 +94,19 @@ class Widget {
             this.$element.setAttribute(key, value);
         }
         for (const child of children) {
-            this.addChild(child);
+            this.appendChild(child);
         }
     }
 
-    addChild(widgetOrNode) {
-        let $node;
-        if (widgetOrNode instanceof Widget) {
-            $node = widgetOrNode.$element
-        }
-        else if (widgetOrNode instanceof Node) {
-            $node = widgetOrNode;
-        }
-        else if (widgetOrNode === null || widgetOrNode === undefined || widgetOrNode === "") {
+    appendChild(widgetOrNode) {
+        let $node = this._widgetOrNodeToNode(widgetOrNode);
+        if (!$node) {
             return;
-        }
-        else {
-            $node = document.createTextNode(widgetOrNode);
         }
         this.$element.appendChild($node);
     }
 
-    addChildren(widgetsAndNodes) {
+    appendChildren(widgetsAndNodes) {
         let children;
         if (arguments.length != 1 || !Array.isArray(widgetsAndNodes)) {
             children = arguments;
@@ -124,7 +115,30 @@ class Widget {
             children = widgetsAndNodes;
         }
         for (const widgetOrNode of children) {
-            this.addChild(widgetOrNode);
+            this.appendChild(widgetOrNode);
+        }
+    }
+
+    prependChild(widgetOrNode) {
+        let $node = this._widgetOrNodeToNode(widgetOrNode);
+        if (!$node) {
+            return;
+        }
+        this.$element.prependChild($node);
+    }
+
+    _widgetOrNodeToNode(widgetOrNode) {
+        if (widgetOrNode instanceof Widget) {
+            return widgetOrNode.$element;
+        }
+        else if (widgetOrNode instanceof Node) {
+            return widgetOrNode;
+        }
+        else if (widgetOrNode === null || widgetOrNode === undefined || widgetOrNode === "") {
+            return undefined;
+        }
+        else {
+            return document.createTextNode(widgetOrNode);
         }
     }
 
@@ -190,7 +204,7 @@ class Card extends Widget {
             this.left = new Widget("div", {"class": "Left"}, footer),
             this.status = new Status("hidden"),
         ])
-        this.addChildren(this.head, this.body, this.foot);
+        this.appendChildren(this.head, this.body, this.foot);
     }
 
     getInput() {
@@ -298,7 +312,7 @@ class InputSelector extends Widget {
             }
             options.push(widget);
         }
-        this.addChildren(options);
+        this.appendChildren(options);
     }
 
     getValue() {
@@ -311,7 +325,7 @@ class Layout extends Widget {
         super("section", {"class": "Layout " + className});
         this.head = new Widget("h1", {}, [label]);
         this.body = new Widget("div", {"class": "Body"}, children);
-        this.addChildren(this.head, this.body);
+        this.appendChildren(this.head, this.body);
     }
 }
 
@@ -432,9 +446,34 @@ class Status extends Widget {
 
 class Contract extends Card {
     constructor(id, label, data, text, signatories) {
-        super("Contract", label, templateTextToStringsAndWidgets(text, data, false), [
+        const labelWithId = new Widget("span", {}, [
+            label, new Widget("span", {"class":"meta"}, [" [", id, "]"])
+        ]);
+        super("Contract", labelWithId, templateTextToStringsAndWidgets(text, data, false), [
             new Widget("span", {"class": "Label"}, ["Signatories:"]),
             ...signatories.map(signatory => new Widget("span", {"class": "Signatory"}, [signatory]))]);
+    }
+}
+
+class ContractReceived extends Card {
+    constructor(id, label, signatories, sender) {
+        const labelWithTimestampAndSender = new Widget("div", {}, [
+            new Widget("div", {"class": "timestamp"}, [new Date().toISOString()]),
+            new Widget("div", {}, [
+                "Received ",
+                new Widget("i", {}, [label]),
+                " from ",
+                new Widget ("i", {}, [sender])
+            ]),
+        ]);
+        super("ContractReceived", labelWithTimestampAndSender, [
+            new Widget("span", {"class": "label"}, ["ID: "]),
+            new Widget("span", {"class": "value"}, [id]),
+            new Widget("span", {"class": "label"}, ["Signatories: "]),
+            new Widget("span", {"class": "value"}, signatories.map(signatory => {
+                return new Widget("span", {"class": "signatory"}, [signatory]);
+            })),
+        ]);
     }
 }
 
@@ -480,7 +519,6 @@ function templateTextToStringsAndWidgets(text, data = {}, areEditable = false) {
 }
 
 function main() {
-
     const root = new Widget(document.getElementById("root"));
     const modal = new Modal(document.getElementById("modal"));
 
@@ -490,7 +528,7 @@ function main() {
 
     global.subscribe("dialog.show.offer", template => {
         modal.clearChildren();
-        modal.addChild(new OfferDialog(template.id, template.label, template.text));
+        modal.appendChild(new OfferDialog(template.id, template.label, template.text));
         modal.show();
     });
 
@@ -505,17 +543,8 @@ function main() {
             templates.push(new Template(template.name, template.label, template.text));
             return templates;
         }, []));
-    const layoutLog = new Layout("log", "Event Log", [
-        card = new Card("offer", "Offer", [
-            "Hello ",
-            new InputField("name", "name", "Emanuel", true),
-            "! How are ",
-            new InputField("someone", "someone", "Sofia", true),
-            " doing?",
-        ], [
-            new Action("x", "Submit", () => console.log(card.getInput())),
-            new Action("y", "Reject", () => console.log("What!?")),
-        ])
+    const layoutInbox = new Layout("inbox", "Negotiation Inbox", [
+        new ContractReceived("1023123", "Component Order", ["Assembly Plant Inc.", "Supplier Inc."], "Supplier Inc.")
     ]);
     const layoutContracts = new Layout("contracts", "Contracts", [
         new Contract(global.templates[0].name, global.templates[0].label, {
@@ -526,7 +555,7 @@ function main() {
         }, global.templates[0].text, ["Assembly Plant Inc.", "Supplier Inc."]),
     ]);
 
-    root.addChildren(layoutTemplates, layoutLog, layoutContracts);
+    root.appendChildren(layoutTemplates, layoutInbox, layoutContracts);
 
     setTimeout(() => {
         card.status.setError("Something bad is going on here!");
