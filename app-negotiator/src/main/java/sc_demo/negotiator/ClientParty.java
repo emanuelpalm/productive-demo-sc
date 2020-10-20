@@ -5,7 +5,7 @@ import se.arkalix.dto.DtoWritableAs;
 import static se.arkalix.dto.DtoEncoding.JSON;
 
 @DtoWritableAs(JSON)
-public interface Party {
+public interface ClientParty {
     String name();
     String label();
 }

@@ -74,15 +74,15 @@ public class Config {
         return new InetSocketAddress(hostname, port);
     }
 
-    public PartyDto me() {
-        return new PartyBuilder()
+    public ClientPartyDto me() {
+        return new ClientPartyBuilder()
             .name(getStringOrThrow("app.me.name"))
             .label(getStringOrThrow("app.me.label"))
             .build();
     }
 
-    public List<PartyDto> parties() {
-        final var list = new ArrayList<PartyDto>();
+    public List<ClientPartyDto> parties() {
+        final var list = new ArrayList<ClientPartyDto>();
 
         final var raw = getStringOrThrow("app.parties");
         final var pairs = raw.split(",");
@@ -90,7 +90,7 @@ public class Config {
             final var parts = pair.split(":", 2);
             final var name = parts[0].trim();
             final var label = parts.length == 2 ? parts[1].trim() : name;
-            list.add(new PartyBuilder()
+            list.add(new ClientPartyBuilder()
                 .name(name)
                 .label(label)
                 .build());
@@ -99,8 +99,8 @@ public class Config {
         return list;
     }
 
-    public List<TemplateDto> templates() {
-        final var list = new ArrayList<TemplateDto>();
+    public List<ClientTemplateDto> templates() {
+        final var list = new ArrayList<ClientTemplateDto>();
 
         final var raw = getStringOrThrow("app.templates");
         final var pairs = raw.split(",");
@@ -110,7 +110,7 @@ public class Config {
             try {
                 final var text = Files.readString(Path.of(pathString), StandardCharsets.UTF_8);
                 final var label = parts.length == 2 ? parts[1].trim() : pathString;
-                list.add(new TemplateBuilder()
+                list.add(new ClientTemplateBuilder()
                     .name(pathString)
                     .label(label)
                     .text(text)

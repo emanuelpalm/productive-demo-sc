@@ -6,7 +6,7 @@ plugins {
 mainClassName = "${project.group}.forecaster.Main"
 
 ext {
-    versionArkalix = '0.5.0'
+    versionArkalix = '0.5.1-SNAPSHOT'
     versionSlf4j = '1.7.30'
 }
 

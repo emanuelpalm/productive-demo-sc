@@ -770,6 +770,7 @@ function main() {
     root.appendChildren(layoutTemplates, layoutInbox, layoutContracts);
 
     const refresh = () => {
+        console.clear();
         console.log("Refreshing!");
 
         global.getJson("/ui/me")
@@ -787,33 +788,49 @@ function main() {
         global.deleteJson("/ui/inbox/entries")
             .then(entries => {
                 for (const entry of entries) {
-                    if (entry.id) {
-                        layoutInbox.body.removeFirstChildMatching(child => {
-                            return child instanceof Widget && child.id === entry.id;
-                        });
-                    }
-                    let widget;
+                    let child;
                     switch (entry.type) {
-                    case "OFFER_ACCEPT":
-                        widget = new AcceptReceived(entry.id, entry.offer);
+                    case "CONTRACT":
+                        child = new ContractReceived(entry.id, entry.contract.label, entry.contract.signatories, entry.contract.sender);
                         break;
-                    case "OFFER_SUBMIT":
-                        widget = new OfferReceived(entry.id, entry.offer);
+                    case "OFFER_ACCEPT":
+                        child = new AcceptReceived(entry.id, entry.offer);
                         break;
                     case "OFFER_COUNTER":
-                        widget = new CounterOfferReceived(entry.id, entry.offer);
+                        child = new CounterOfferReceived(entry.id, entry.offer);
                         break;
+                    case "OFFER_FAULT":
+                        child = layoutInbox.body.getFirstChildMatching(child => {
+                            return child instanceof Widget && child.id === entry.id;
+                        });
+                        if (child) {
+                            child.status.setError(entry.error);
+                        }
+                        continue;
+                    case "OFFER_EXPIRY":
+                        child = layoutInbox.body.getFirstChildMatching(child => {
+                            return child instanceof Widget && child.id === entry.id;
+                        });
+                        if (child) {
+                            child.status.setWarning("This offer has expired.");
+                        }
+                        continue;
                     case "OFFER_REJECT":
-                        widget = new RejectReceived(entry.id, entry.offer);
+                        child = new RejectReceived(entry.id, entry.offer);
                         break;
-                    case "CONTRACT":
-                        widget = new ContractReceived(entry.id, entry.contract.label, entry.contract.signatories, entry.contract.sender);
+                    case "OFFER_SUBMIT":
+                        child = new OfferReceived(entry.id, entry.offer);
                         break;
                     default:
                         console.log("Received entry with unexpected type", entry);
                         continue;
                     }
-                    layoutInbox.body.prependChild(widget);
+                    if (entry.id) {
+                        layoutInbox.body.removeFirstChildMatching(child => {
+                            return child instanceof Widget && child.id === entry.id;
+                        });
+                    }
+                    layoutInbox.body.prependChild(child);
                 }
             });
     };
