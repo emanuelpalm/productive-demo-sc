@@ -1,6 +1,6 @@
 By merit of Final Assembly Plant Inc. having
 accepted the completion of delivery
-{transportCompletionHash}, Component Supplier
+{transportCompletion:hash}, Component Supplier
 Inc. hereby requests Final Assembly Plant Inc.
 to bind itself, by its digital signature, to
 make the payment expressed as conditional in

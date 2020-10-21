@@ -1,4 +1,4 @@
 Final Assembly Plant Inc. hereby affirms that the
-delivery of component order {componentOrderHash}
+delivery of component order {componentOrder:hash}
 has been completed according to the terms of
-contract {transportConfirmationHash}.
+contract {transportConfirmation:hash}.

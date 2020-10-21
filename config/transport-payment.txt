@@ -1,8 +1,8 @@
 By merit of Final Assembly Plant Inc. having
 confirmed that the booked transport
-{transportBookingHash} has been completed via
-{transportCompletionHash}, Carrier Inc. hereby
+{transportBooking:hash} has been completed via
+{transportCompletion:hash}, Carrier Inc. hereby
 requests Component Supplier Inc. to bind itself,
-by its digital siganture, to make the payment
+by its digital signature, to make the payment
 expressed as conditional in the referenced
 transport booking.

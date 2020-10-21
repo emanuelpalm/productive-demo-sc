@@ -63,6 +63,8 @@ const global = {
         }
     ],
 
+    definitions: new Map(),
+
     partyByName(name) {
         for (const party of global.parties) {
             if (party.name === name) {
@@ -703,16 +705,6 @@ class OfferReceived extends MessageReceived {
     }
 }
 
-class CounterOfferReceived extends MessageReceived {
-    constructor(id, offer) {
-        super(id, offer, "CounterOfferReceived", "Countered", [
-            new Action("accept", "Accept", () => global.publish("offer.accept", {id, offer})),
-            new Action("counter", "Counter", () => global.publish("dialog.show.counterOffer", {id, offer})),
-            new Action("reject", "Reject", () => global.publish("offer.reject", {id, offer})),
-        ]);
-    }
-}
-
 class RejectReceived extends MessageReceived {
     constructor(id, offer) {
         super(id, offer, "RejectReceived", "Rejected");
@@ -788,16 +780,37 @@ function main() {
         global.deleteJson("/ui/inbox/entries")
             .then(entries => {
                 for (const entry of entries) {
-                    let child;
+                    let child, definition;
                     switch (entry.type) {
-                    case "CONTRACT":
-                        child = new ContractReceived(entry.id, entry.contract.label, entry.contract.signatories, entry.contract.sender);
+                    case "DEFINITION":
+                        child = (entry.definition || {});
+                        if (child.acceptance) {
+                            definition = child.acceptance;
+                            definition.type = "acceptance";
+                        }
+                        else if (child.offer) {
+                            definition = child.offer;
+                            definition.type = "offer";
+                        }
+                        else if (child.rejection) {
+                            definition = child.rejection;
+                            definition.type = "rejection";
+                        }
+                        else {
+                            console.log("Received empty definition entry", entry);
+                            break;
+                        }
+                        if (Array.isArray(child.hashes)) {
+                            for (const hash of child.hashes) {
+                                global.definitions.set(hash, definition);
+                            }
+                        }
+                        else {
+                            console.log("Received definition entry contains no hashes", entry);
+                        }
                         break;
                     case "OFFER_ACCEPT":
                         child = new AcceptReceived(entry.id, entry.offer);
-                        break;
-                    case "OFFER_COUNTER":
-                        child = new CounterOfferReceived(entry.id, entry.offer);
                         break;
                     case "OFFER_FAULT":
                         child = layoutInbox.body.getFirstChildMatching(child => {

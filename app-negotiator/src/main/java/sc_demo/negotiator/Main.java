@@ -7,11 +7,14 @@ import se.arkalix.core.plugin.HttpJsonCloudPlugin;
 import se.arkalix.core.plugin.cp.*;
 import se.arkalix.descriptor.EncodingDescriptor;
 import se.arkalix.dto.DtoWritable;
+import se.arkalix.dto.json.value.JsonObject;
+import se.arkalix.internal.core.plugin.Paths;
 import se.arkalix.net.http.HttpStatus;
+import se.arkalix.net.http.consumer.HttpConsumer;
+import se.arkalix.net.http.consumer.HttpConsumerRequest;
 import se.arkalix.net.http.service.HttpRouteHandler;
 import se.arkalix.net.http.service.HttpService;
 import se.arkalix.net.http.service.HttpServiceRequestException;
-import se.arkalix.security.access.AccessPolicy;
 import se.arkalix.security.identity.OwnedIdentity;
 import se.arkalix.security.identity.TrustStore;
 
@@ -26,10 +29,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 import static se.arkalix.descriptor.EncodingDescriptor.JSON;
+import static se.arkalix.net.http.HttpMethod.GET;
 import static se.arkalix.net.http.HttpStatus.NO_CONTENT;
 import static se.arkalix.net.http.HttpStatus.OK;
 import static se.arkalix.security.access.AccessPolicy.cloud;
-import static se.arkalix.security.access.AccessPolicy.token;
 import static se.arkalix.util.concurrent.Future.done;
 
 public class Main {
@@ -89,6 +92,8 @@ public class Main {
                         .id(negotiation.id())
                         .offer(negotiation.offer())
                         .build());
+
+                    collectDefinitionsForNegotiationWith(negotiation.id());
                 }
 
                 @Override
@@ -102,6 +107,8 @@ public class Main {
                         .id(negotiation.id())
                         .offer(negotiation.offer())
                         .build());
+
+                    collectDefinitionsForNegotiationWith(negotiation.id());
                 }
 
                 @Override
@@ -111,6 +118,8 @@ public class Main {
                         .id(negotiation.id())
                         .offer(negotiation.offer())
                         .build());
+
+                    collectDefinitionsForNegotiationWith(negotiation.id());
                 }
 
                 @Override
@@ -132,6 +141,28 @@ public class Main {
                         .build());
 
                     TrustedContractNegotiatorHandler.super.onFault(negotiationId, throwable);
+                }
+
+                private void collectDefinitionsForNegotiationWith(final long negotiationId) {
+                    system.consume()
+                        .name("trusted-contract-negotiation")
+                        .encodings(JSON)
+                        .oneUsing(HttpConsumer.factory())
+                        .flatMap(consumer -> consumer.send(new HttpConsumerRequest()
+                            .method(GET)
+                            .path(Paths.combine(consumer.service().uri(), "definitions"))
+                            .queryParameter("id", negotiationId)))
+                        .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
+                        .ifSuccess(definitions -> definitions
+                            .forEach(definition -> inboxEntries
+                                .addLast(new ClientInboxEntryBuilder()
+                                    .type(ClientInboxEntry.Type.DEFINITION)
+                                    .id(negotiationId)
+                                    .definition(definition)
+                                    .build())))
+                        .onFailure(fault -> logger.error("Failed to acquire " +
+                            "definitions related to negotiation " +
+                            negotiationId, fault));
                 }
             };
 
@@ -209,19 +240,6 @@ public class Main {
                         .orElseThrow(() -> new HttpServiceRequestException(HttpStatus.BAD_REQUEST)))
                         .reject())
                     .ifSuccess(ignored -> response.status(NO_CONTENT))))
-
-                .onFailure(Main::panic);
-
-            system.provide(new HttpService()
-                .name("negotiation-definition-sharing")
-                .encodings(JSON)
-                .accessPolicy(token())
-                .basePath("/")
-
-                .post("/definitions", (request, response) -> {
-
-                    return done();
-                }))
 
                 .onFailure(Main::panic);
 
