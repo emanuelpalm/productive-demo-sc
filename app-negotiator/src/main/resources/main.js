@@ -313,7 +313,7 @@ class Card extends Widget {
     getInput() {
         const map = new Map();
         for (const nodeOrWidget of this.body) {
-            if (nodeOrWidget instanceof InputField) {
+            if (nodeOrWidget instanceof HashField || nodeOrWidget instanceof InputField) {
                 const value = nodeOrWidget.getValue();
                 if ((value || "").trim().length === 0) {
                     nodeOrWidget.addClass("error");
@@ -325,6 +325,55 @@ class Card extends Widget {
             }
         }
         return map;
+    }
+}
+
+class HashField extends Widget {
+    constructor(name, label = null, value = null, isEditable = true) {
+        super("span", {"class": "HashField " + name});
+        this.name = name;
+        this.label = name || label;
+        if (isEditable) {
+            let hasSelectedOption = false;
+            this.appendChild(this.select = new Widget("select", {}, global.definitions
+                .values()
+                .map(definition => {
+                    const attributes = {"value": value || definition.hashes[0]};
+                    if (value && definition.hashes.some(hash => hash === value)) {
+                        attributes.selected = "selected";
+                        hasSelectedOption = true;
+                    }
+                    return new Widget(
+                        "option",
+                        attributes,
+                        definition.type + " of [" + definition.negotiationId + "]"
+                    );
+                })
+            ));
+            if (!hasSelectedOption) {
+                this.select.prependChild(new Widget("option", {"selected", "selected"}, "{" + this.label + "}"));
+                if (value) {
+                    console.log("No definition exists with the hash " + value);
+                }
+            }
+            this._getValue = () => (this.select.$element.value || "").trim();
+        }
+        else {
+            const definition = global.definitions.get(value);
+            if (!definition) {
+                console.log("No definition exists with the hash " + value);
+                this.addClass("empty");
+                this.appendChild(label || name);
+                this._getValue = () => "";
+                return;
+            }
+            this.appendChild(definition.type + " of [" + definition.negotiationId + "]");
+            this._getValue = () => value;
+        }
+    }
+
+    getValue() {
+        return this._getValue();
     }
 }
 
@@ -734,7 +783,8 @@ function templateTextToStringsAndWidgets(text, data = {}, areEditable = false) {
                     t0 = t1;
 
                     const value = data instanceof Map ? data.get(name) : data[name];
-                    result.push(new InputField(name, name, value, areEditable));
+                    const field = name.endsWith(":hash") ? HashField : InputField;
+                    result.push(new field(name.split(":")[0], name, value, areEditable));
                     break;
                 }
                 else {
@@ -763,7 +813,6 @@ function main() {
 
     const refresh = () => {
         console.clear();
-        console.log("Refreshing!");
 
         global.getJson("/ui/me")
             .then(me => global.me = me.name);
@@ -786,21 +835,22 @@ function main() {
                         child = (entry.definition || {});
                         if (child.acceptance) {
                             definition = child.acceptance;
-                            definition.type = "acceptance";
+                            definition.type = "Acceptance";
                         }
                         else if (child.offer) {
                             definition = child.offer;
-                            definition.type = "offer";
+                            definition.type = "Offer";
                         }
                         else if (child.rejection) {
                             definition = child.rejection;
-                            definition.type = "rejection";
+                            definition.type = "Rejection";
                         }
                         else {
-                            console.log("Received empty definition entry", entry);
+                            console.log("Received empty or unrecognized type of definition entry", entry);
                             break;
                         }
                         if (Array.isArray(child.hashes)) {
+                            child.hashes = child.hashes.map(hash => hash.algorithm + ":" + hash.sum);
                             for (const hash of child.hashes) {
                                 global.definitions.set(hash, definition);
                             }
@@ -808,10 +858,18 @@ function main() {
                         else {
                             console.log("Received definition entry contains no hashes", entry);
                         }
-                        break;
+                        continue;
+
                     case "OFFER_ACCEPT":
                         child = new AcceptReceived(entry.id, entry.offer);
                         break;
+                    case "OFFER_REJECT":
+                        child = new RejectReceived(entry.id, entry.offer);
+                        break;
+                    case "OFFER_SUBMIT":
+                        child = new OfferReceived(entry.id, entry.offer);
+                        break;
+
                     case "OFFER_FAULT":
                         child = layoutInbox.body.getFirstChildMatching(child => {
                             return child instanceof Widget && child.id === entry.id;
@@ -828,12 +886,7 @@ function main() {
                             child.status.setWarning("This offer has expired.");
                         }
                         continue;
-                    case "OFFER_REJECT":
-                        child = new RejectReceived(entry.id, entry.offer);
-                        break;
-                    case "OFFER_SUBMIT":
-                        child = new OfferReceived(entry.id, entry.offer);
-                        break;
+
                     default:
                         console.log("Received entry with unexpected type", entry);
                         continue;
