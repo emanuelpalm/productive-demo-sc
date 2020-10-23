@@ -102,14 +102,14 @@ const global = {
         }
         if (negotiation.signedAcceptance) {
             for (const acceptanceHash of negotiation.signedAcceptance.hashes) {
-                if (hash === offerHash) {
+                if (hash === acceptanceHash) {
                     return global.templateByName(negotiation.trustedOffers[negotiation.trustedOffers.length - 1].contracts[0].templateName).label + ", acceptance [" + id + "]";
                 }
             }
         }
         if (negotiation.signedRejection) {
-            for (const acceptanceHash of negotiation.signedRejection.hashes) {
-                if (hash === offerHash) {
+            for (const rejectionHash of negotiation.signedRejection.hashes) {
+                if (hash === rejectionHash) {
                     return global.templateByName(negotiation.trustedOffers[negotiation.trustedOffers.length - 1].contracts[0].templateName).label + ", rejection [" + id + "]";
                 }
             }
@@ -985,12 +985,7 @@ function main() {
                                 }
                                 continue;
                             case "OFFER_EXPIRY":
-                                child = layoutInbox.body.getFirstChildMatching(child => {
-                                    return child instanceof Widget && child.id === entry.id;
-                                });
-                                if (child) {
-                                    child.status.setWarning("This offer has expired.");
-                                }
+                                // Ignored.
                                 continue;
 
                             default:

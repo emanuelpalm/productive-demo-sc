@@ -19,7 +19,9 @@ import se.arkalix.security.identity.TrustStore;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
@@ -90,7 +92,7 @@ public class Main {
                         .offer(negotiation.offer())
                         .build());
 
-                    collectDefinitionsForNegotiationWithId(negotiation.id());
+                    collectDefinitionsForNegotiationWithId(system, inboxEntries, negotiation.id());
                 }
 
                 @Override
@@ -105,8 +107,8 @@ public class Main {
                         .offer(negotiation.offer())
                         .build());
 
-                    collectDefinitionsForNegotiationWithId(negotiation.id());
-                    collectDefinitionsForHashReferencesIn(negotiation);
+                    collectDefinitionsForNegotiationWithId(system, inboxEntries, negotiation.id());
+                    collectDefinitionsForHashReferencesIn(system, inboxEntries, negotiation);
                 }
 
                 @Override
@@ -117,7 +119,7 @@ public class Main {
                         .offer(negotiation.offer())
                         .build());
 
-                    collectDefinitionsForNegotiationWithId(negotiation.id());
+                    collectDefinitionsForNegotiationWithId(system, inboxEntries, negotiation.id());
                 }
 
                 @Override
@@ -139,64 +141,6 @@ public class Main {
                         .build());
 
                     TrustedContractNegotiatorHandler.super.onFault(negotiationId, throwable);
-                }
-
-                private void collectDefinitionsForNegotiationWithId(final long negotiationId) {
-                    system.consume()
-                        .name("trusted-contract-negotiation")
-                        .encodings(JSON)
-                        .oneUsing(HttpConsumer.factory())
-                        .flatMap(consumer -> consumer.send(new HttpConsumerRequest()
-                            .method(GET)
-                            .path(Paths.combine(consumer.service().uri(), "definitions"))
-                            .queryParameter("id", negotiationId)))
-                        .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
-                        .ifSuccess(definitions -> definitions
-                            .forEach(definition -> inboxEntries
-                                .add(new ClientInboxEntryBuilder()
-                                    .type(ClientInboxEntry.Type.DEFINITION)
-                                    .id(negotiationId)
-                                    .definition(definition)
-                                    .build())))
-                        .onFailure(fault -> logger.error("Failed to acquire " +
-                            "definitions related to negotiation " +
-                            negotiationId, fault));
-                }
-
-                private void collectDefinitionsForHashReferencesIn(final TrustedContractNegotiationDto negotiation) {
-                    final var hash = negotiation.offer()
-                        .contracts()
-                        .stream()
-                        .flatMap(contract -> contract.arguments()
-                            .entrySet()
-                            .stream()
-                            .filter(entry -> entry.getKey().endsWith(":hash"))
-                            .map(Map.Entry::getValue))
-                        .collect(Collectors.joining(","));
-
-                    if (hash.isEmpty()) {
-                        return;
-                    }
-
-                    system.consume()
-                        .name("trusted-contract-negotiation")
-                        .encodings(JSON)
-                        .oneUsing(HttpConsumer.factory())
-                        .flatMap(consumer -> consumer.send(new HttpConsumerRequest()
-                            .method(GET)
-                            .path(Paths.combine(consumer.service().uri(), "definitions"))
-                            .queryParameter("hash", hash)))
-                        .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
-                        .ifSuccess(definitions -> definitions
-                            .forEach(definition -> inboxEntries
-                                .add(new ClientInboxEntryBuilder()
-                                    .type(ClientInboxEntry.Type.DEFINITION)
-                                    .id(-negotiation.id())
-                                    .definition(definition)
-                                    .build())))
-                        .onFailure(fault -> logger.error("Failed to acquire " +
-                            "definitions referenced by negotiation " +
-                            negotiation.id(), fault));
                 }
             };
 
@@ -246,15 +190,22 @@ public class Main {
                             .arguments(offer.contract())
                             .build()),
                         negotiationHandler))
-                    .ifSuccess(id -> response
-                        .status(OK)
-                        .body(new ClientIdBuilder().id(id).build())))
+                    .ifSuccess(id -> {
+                        response
+                            .status(OK)
+                            .body(new ClientIdBuilder().id(id).build());
+                        collectDefinitionsForNegotiationWithId(system, inboxEntries, id);
+                    }))
 
                 .post("/acceptances", (request, response) -> request
                     .bodyAs(ClientIdDto.class)
                     .flatMap(offer -> offerResponders.get(offer.id())
-                        .accept())
-                    .ifSuccess(ignored -> response.status(NO_CONTENT)))
+                        .accept()
+                        .pass(offer))
+                    .ifSuccess(offer -> {
+                        response.status(NO_CONTENT);
+                        collectDefinitionsForNegotiationWithId(system, inboxEntries, offer.id());
+                    }))
 
                 .post("/counter-offers", (request, response) -> request
                     .bodyAs(TrustedContractCounterOfferDto.class)
@@ -271,8 +222,12 @@ public class Main {
                 .post("/rejections", (request, response) -> request
                     .bodyAs(ClientIdDto.class)
                     .flatMap(offer -> offerResponders.get(offer.id())
-                        .reject())
-                    .ifSuccess(ignored -> response.status(NO_CONTENT))))
+                        .reject()
+                        .pass(offer))
+                    .ifSuccess(offer ->  {
+                        response.status(NO_CONTENT);
+                        collectDefinitionsForNegotiationWithId(system, inboxEntries, offer.id());
+                    })))
 
                 .onFailure(Main::panic);
 
@@ -281,6 +236,72 @@ public class Main {
         catch (final Throwable throwable) {
             panic(throwable);
         }
+    }
+
+    private static void collectDefinitionsForNegotiationWithId(
+        final ArSystem system,
+        final List<ClientInboxEntryDto> inboxEntries,
+        final long negotiationId
+    ) {
+        system.consume()
+            .name("trusted-contract-negotiation")
+            .encodings(JSON)
+            .oneUsing(HttpConsumer.factory())
+            .flatMap(consumer -> consumer.send(new HttpConsumerRequest()
+                .method(GET)
+                .path(Paths.combine(consumer.service().uri(), "definitions"))
+                .queryParameter("id", negotiationId)))
+            .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
+            .ifSuccess(definitions -> definitions
+                .forEach(definition -> inboxEntries
+                    .add(new ClientInboxEntryBuilder()
+                        .type(ClientInboxEntry.Type.DEFINITION)
+                        .id(negotiationId)
+                        .definition(definition)
+                        .build())))
+            .onFailure(fault -> logger.error("Failed to acquire " +
+                "definitions related to negotiation " +
+                negotiationId, fault));
+    }
+
+    private static void collectDefinitionsForHashReferencesIn(
+        final ArSystem system,
+        final List<ClientInboxEntryDto> inboxEntries,
+        final TrustedContractNegotiationDto negotiation
+    ) {
+        final var hash = negotiation.offer()
+            .contracts()
+            .stream()
+            .flatMap(contract -> contract.arguments()
+                .entrySet()
+                .stream()
+                .filter(entry -> entry.getKey().endsWith(":hash"))
+                .map(Map.Entry::getValue))
+            .collect(Collectors.joining(","));
+
+        if (hash.isEmpty()) {
+            return;
+        }
+
+        system.consume()
+            .name("trusted-contract-negotiation")
+            .encodings(JSON)
+            .oneUsing(HttpConsumer.factory())
+            .flatMap(consumer -> consumer.send(new HttpConsumerRequest()
+                .method(GET)
+                .path(Paths.combine(consumer.service().uri(), "definitions"))
+                .queryParameter("hash", hash)))
+            .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
+            .ifSuccess(definitions -> definitions
+                .forEach(definition -> inboxEntries
+                    .add(new ClientInboxEntryBuilder()
+                        .type(ClientInboxEntry.Type.DEFINITION)
+                        .id(-negotiation.id())
+                        .definition(definition)
+                        .build())))
+            .onFailure(fault -> logger.error("Failed to acquire " +
+                "definitions referenced by negotiation " +
+                negotiation.id(), fault));
     }
 
     private static byte[] readResourceAsBytes(final String path) {
