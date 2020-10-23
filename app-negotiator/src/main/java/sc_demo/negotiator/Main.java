@@ -184,7 +184,7 @@ public class Main {
                     .flatMap(offer -> negotiator.offer(
                         me.name(),
                         offer.receiver(),
-                        Duration.ofMinutes(3),
+                        Duration.ofHours(3),
                         List.of(new TrustedContractBuilder()
                             .templateName(offer.template().name())
                             .arguments(offer.contract())
@@ -211,7 +211,7 @@ public class Main {
                     .bodyAs(TrustedContractCounterOfferDto.class)
                     .flatMap(offer -> offerResponders.get(offer.negotiationId())
                         .offer(new SimplifiedContractCounterOffer.Builder()
-                            .validFor(Duration.ofMinutes(3))
+                            .validFor(Duration.ofHours(3))
                             .contracts(new TrustedContractBuilder()
                                 .templateName(offer.contracts().get(0).templateName())
                                 .arguments(offer.contracts().get(0).arguments())

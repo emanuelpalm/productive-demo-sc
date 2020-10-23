@@ -88,33 +88,35 @@ const global = {
     },
 
     definitionDescriptionByNegotiationIdAndHash: (id, hash) => {
+        const idHash = "[" + id + "] " + hash.substr(hash.indexOf(":") + 1).substr(0, 14) + "...";
+
         const negotiation = global.negotiationById(id)
         if (!negotiation || !negotiation.signedOffers || !negotiation.trustedOffers) {
-            return "[" + id + "] " + hash.substr(0, 22) + "...";
+            return idHash;
         }
         for (let i = negotiation.signedOffers.length; i-- > 0;) {
             const offer = negotiation.signedOffers[i];
             for (const offerHash of offer.hashes) {
                 if (hash === offerHash) {
-                    return global.templateByName(negotiation.trustedOffers[i].contracts[0].templateName).label + ", offer " + (i + 1) + " [" + id + "]";
+                    return "Offer " + idHash;
                 }
             }
         }
         if (negotiation.signedAcceptance) {
             for (const acceptanceHash of negotiation.signedAcceptance.hashes) {
                 if (hash === acceptanceHash) {
-                    return global.templateByName(negotiation.trustedOffers[negotiation.trustedOffers.length - 1].contracts[0].templateName).label + ", acceptance [" + id + "]";
+                    return "Acceptance " + idHash;
                 }
             }
         }
         if (negotiation.signedRejection) {
             for (const rejectionHash of negotiation.signedRejection.hashes) {
                 if (hash === rejectionHash) {
-                    return global.templateByName(negotiation.trustedOffers[negotiation.trustedOffers.length - 1].contracts[0].templateName).label + ", rejection [" + id + "]";
+                    return "Rejection " + idHash;
                 }
             }
         }
-        return "[" + id + "] " + hash.substr(0, 22) + "...";
+        return idHash;
     },
 
     getJson: (url, headers) => {
@@ -712,7 +714,7 @@ class Contract extends Card {
             label, new Widget("span", {"class":"meta"}, [" [", id, "]"])
         ]);
         super("Contract", labelWithId, templateTextToStringsAndWidgets(text, data, false), [
-            new Widget("span", {"class": "Label"}, ["Signatories:"]),
+            new Widget("span", {"class": "Label"}, ["Signed by"]),
             ...signatories.map(signatory => new Widget("span", {"class": "Signatory"}, [signatory]))]);
     }
 }
@@ -731,7 +733,7 @@ class ContractReceived extends Card {
         super("ContractReceived", labelWithTimestampAndSender, [
             new Widget("span", {"class": "label"}, ["ID: "]),
             new Widget("span", {"class": "value"}, [id]),
-            new Widget("span", {"class": "label"}, ["Signatories: "]),
+            new Widget("span", {"class": "label"}, ["Signed by: "]),
             new Widget("span", {"class": "value"}, signatories.map(signatory => {
                 return new Widget("span", {"class": "signatory"}, [signatory]);
             })),

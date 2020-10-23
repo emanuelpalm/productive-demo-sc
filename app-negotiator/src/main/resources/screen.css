@@ -61,7 +61,7 @@ body,
 }
 
 #modal > * {
-    max-width: 38rem;
+    max-width: 30.7rem;
     opacity: 0.0;
     transition-property: opacity, transform;
     transition-duration: 0.25s;
@@ -74,7 +74,7 @@ body,
 }
 
 #user {
-    background-color: #DDD;
+    background-color: #DDDDDDCC;
     border-radius: 0 0 0.5rem 0;
     font-weight: bold;
     left: 0;
@@ -130,21 +130,23 @@ body,
     box-shadow: 0 0.2rem 0.1rem #00000020;
     display: flex;
     flex-direction: column;
-    margin: 1rem;
+    margin: 0.5rem;
 }
 
 .Card > .Head {
     background-color: #FAFAFA;
     border-bottom: 0.1rem solid #CCC;
     border-radius: 0.25rem 0.25rem 0 0;
-    font-size: 1.25rem;
-    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    line-break: 1.25;
+    padding: 0.5rem 0.75rem;
 }
 
 .Card > .Body {
     background-color: #FFF;
-    padding: 1rem;
+    padding: 0.5rem 0.75rem 0.75rem 0.75rem;
     line-height: 1.75;
+    font-size: 0.9rem;
 }
 
 .Card > .Foot {
@@ -164,8 +166,8 @@ body,
 }
 
 .Card > .Foot > .Left > * {
-    font-size: 0.9rem;
-    margin: 0.5rem 0 0.5rem 0.5rem;
+    font-size: 0.75rem;
+    margin: 0.25rem 0 0.25rem 0.25rem;
 }
 
 .Card > .Foot > .Left > .Action {
@@ -183,8 +185,9 @@ body,
 .Card > .Foot > .Left > .Signatory {
     border: 0.1rem solid #888;
     border-radius: 0.2rem;
-    padding: 0.33rem 0.5rem;
+    padding: 0.2rem;
     text-align: center;
+    font-size: 0.75rem;
 }
 
 .Card > .Foot > .Status {
@@ -255,13 +258,13 @@ body,
 
 .InputSelector {
     color: #13a3aa;
-    font-size: 1.25rem;
-    padding: 0.1rem;
+    font-size: 1rem;
 }
 
 .OfferDialog .InputSelector,
 .OfferDialog .InputSelector > option {
-    font-size: 1.25rem;
+    font-size: 1rem;
+    margin-right:-0.5rem;
 }
 
 .Layout {
@@ -269,7 +272,6 @@ body,
     flex-direction: column;
     margin: 0;
     min-height: 20rem;
-    min-width: 25rem;
 }
 
 .Layout > h1 {
