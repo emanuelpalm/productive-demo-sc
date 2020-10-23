@@ -9,24 +9,21 @@ import se.arkalix.descriptor.EncodingDescriptor;
 import se.arkalix.dto.DtoWritable;
 import se.arkalix.dto.json.value.JsonObject;
 import se.arkalix.internal.core.plugin.Paths;
-import se.arkalix.net.http.HttpStatus;
 import se.arkalix.net.http.consumer.HttpConsumer;
 import se.arkalix.net.http.consumer.HttpConsumerRequest;
 import se.arkalix.net.http.service.HttpRouteHandler;
 import se.arkalix.net.http.service.HttpService;
-import se.arkalix.net.http.service.HttpServiceRequestException;
 import se.arkalix.security.identity.OwnedIdentity;
 import se.arkalix.security.identity.TrustStore;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 import static se.arkalix.descriptor.EncodingDescriptor.JSON;
 import static se.arkalix.net.http.HttpMethod.GET;
@@ -76,9 +73,9 @@ public class Main {
             final var parties = config.parties();
             final var templates = config.templates();
 
-            final var inboxEntries = new LinkedList<ClientInboxEntryDto>();
+            final var inboxEntries = new CopyOnWriteArrayList<ClientInboxEntryDto>();
             final var offerResponders = new ConcurrentHashMap<Long, TrustedContractNegotiatorResponder>();
-            final var negotiator = system.pluginFacadeOf(HttpJsonTrustedContractObserverPlugin.class)
+            final var negotiator = system.pluginFacadeOf(HttpJsonTrustedContractNegotiatorPlugin.class)
                 .map(f -> (ArTrustedContractNegotiatorPluginFacade) f)
                 .orElseThrow(() -> new IllegalStateException("No " +
                     "ArTrustedContractNegotiatorPluginFacade is " +
@@ -87,13 +84,13 @@ public class Main {
             final var negotiationHandler = new TrustedContractNegotiatorHandler() {
                 @Override
                 public void onAccept(final TrustedContractNegotiationDto negotiation) {
-                    inboxEntries.addLast(new ClientInboxEntryBuilder()
+                    inboxEntries.add(new ClientInboxEntryBuilder()
                         .type(ClientInboxEntry.Type.OFFER_ACCEPT)
                         .id(negotiation.id())
                         .offer(negotiation.offer())
                         .build());
 
-                    collectDefinitionsForNegotiationWith(negotiation.id());
+                    collectDefinitionsForNegotiationWithId(negotiation.id());
                 }
 
                 @Override
@@ -102,29 +99,30 @@ public class Main {
                     final TrustedContractNegotiatorResponder responder
                 ) {
                     offerResponders.put(negotiation.id(), responder);
-                    inboxEntries.addLast(new ClientInboxEntryBuilder()
+                    inboxEntries.add(new ClientInboxEntryBuilder()
                         .type(ClientInboxEntry.Type.OFFER_SUBMIT)
                         .id(negotiation.id())
                         .offer(negotiation.offer())
                         .build());
 
-                    collectDefinitionsForNegotiationWith(negotiation.id());
+                    collectDefinitionsForNegotiationWithId(negotiation.id());
+                    collectDefinitionsForHashReferencesIn(negotiation);
                 }
 
                 @Override
                 public void onReject(final TrustedContractNegotiationDto negotiation) {
-                    inboxEntries.addLast(new ClientInboxEntryBuilder()
+                    inboxEntries.add(new ClientInboxEntryBuilder()
                         .type(ClientInboxEntry.Type.OFFER_REJECT)
                         .id(negotiation.id())
                         .offer(negotiation.offer())
                         .build());
 
-                    collectDefinitionsForNegotiationWith(negotiation.id());
+                    collectDefinitionsForNegotiationWithId(negotiation.id());
                 }
 
                 @Override
                 public void onExpiry(final long negotiationId) {
-                    inboxEntries.addLast(new ClientInboxEntryBuilder()
+                    inboxEntries.add(new ClientInboxEntryBuilder()
                         .type(ClientInboxEntry.Type.OFFER_EXPIRY)
                         .id(negotiationId)
                         .build());
@@ -134,7 +132,7 @@ public class Main {
 
                 @Override
                 public void onFault(final long negotiationId, final Throwable throwable) {
-                    inboxEntries.addLast(new ClientInboxEntryBuilder()
+                    inboxEntries.add(new ClientInboxEntryBuilder()
                         .type(ClientInboxEntry.Type.OFFER_FAULT)
                         .id(negotiationId)
                         .error(throwable.getMessage())
@@ -143,7 +141,7 @@ public class Main {
                     TrustedContractNegotiatorHandler.super.onFault(negotiationId, throwable);
                 }
 
-                private void collectDefinitionsForNegotiationWith(final long negotiationId) {
+                private void collectDefinitionsForNegotiationWithId(final long negotiationId) {
                     system.consume()
                         .name("trusted-contract-negotiation")
                         .encodings(JSON)
@@ -155,7 +153,7 @@ public class Main {
                         .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
                         .ifSuccess(definitions -> definitions
                             .forEach(definition -> inboxEntries
-                                .addLast(new ClientInboxEntryBuilder()
+                                .add(new ClientInboxEntryBuilder()
                                     .type(ClientInboxEntry.Type.DEFINITION)
                                     .id(negotiationId)
                                     .definition(definition)
@@ -163,6 +161,42 @@ public class Main {
                         .onFailure(fault -> logger.error("Failed to acquire " +
                             "definitions related to negotiation " +
                             negotiationId, fault));
+                }
+
+                private void collectDefinitionsForHashReferencesIn(final TrustedContractNegotiationDto negotiation) {
+                    final var hash = negotiation.offer()
+                        .contracts()
+                        .stream()
+                        .flatMap(contract -> contract.arguments()
+                            .entrySet()
+                            .stream()
+                            .filter(entry -> entry.getKey().endsWith(":hash"))
+                            .map(Map.Entry::getValue))
+                        .collect(Collectors.joining(","));
+
+                    if (hash.isEmpty()) {
+                        return;
+                    }
+
+                    system.consume()
+                        .name("trusted-contract-negotiation")
+                        .encodings(JSON)
+                        .oneUsing(HttpConsumer.factory())
+                        .flatMap(consumer -> consumer.send(new HttpConsumerRequest()
+                            .method(GET)
+                            .path(Paths.combine(consumer.service().uri(), "definitions"))
+                            .queryParameter("hash", hash)))
+                        .flatMap(response -> response.bodyAsListIfSuccess(JsonObject.class))
+                        .ifSuccess(definitions -> definitions
+                            .forEach(definition -> inboxEntries
+                                .add(new ClientInboxEntryBuilder()
+                                    .type(ClientInboxEntry.Type.DEFINITION)
+                                    .id(-negotiation.id())
+                                    .definition(definition)
+                                    .build())))
+                        .onFailure(fault -> logger.error("Failed to acquire " +
+                            "definitions referenced by negotiation " +
+                            negotiation.id(), fault));
                 }
             };
 
@@ -176,26 +210,28 @@ public class Main {
                 .accessPolicy(cloud())
                 .basePath("/ui")
 
-                .get("/bank.svg", serve(bankSvg))
-                .get("/index.html", serve(indexHtml))
-                .get("/ledger.svg", serve(ledgerSvg))
-                .get("/main.js", serve(mainJs))
-                .get("/messenger.svg", serve(messengerSvg))
-                .get("/screen.css", serve(screenCss))
+                .get("/bank.svg", serve(bankSvg, "image/svg+xml"))
+                .get("/index.html", serve(indexHtml, "text/html"))
+                .get("/ledger.svg", serve(ledgerSvg, "image/svg+xml"))
+                .get("/main.js", serve(mainJs, "text/javascript"))
+                .get("/messenger.svg", serve(messengerSvg, "image/svg+xml"))
+                .get("/screen.css", serve(screenCss, "text/css"))
 
                 .get("/me", serve(me))
                 .get("/parties", serve(parties))
                 .get("/templates", serve(templates))
 
-                .delete("/inbox/entries", (request, response) -> {
-                    final var list = new ArrayList<ClientInboxEntryDto>(inboxEntries.size());
-                    ClientInboxEntryDto entry;
-                    while ((entry = inboxEntries.pollFirst()) != null) {
-                        list.add(entry);
-                    }
+                .get("/inbox/entries", (request, response) -> {
+                    final var from = request.queryParameter("from")
+                        .map(Integer::parseUnsignedInt)
+                        .orElse(0);
+
                     response
                         .status(OK)
-                        .body(list);
+                        .body(inboxEntries.stream()
+                            .skip(from)
+                            .collect(Collectors.toUnmodifiableList()));
+
                     return done();
                 })
 
@@ -215,29 +251,26 @@ public class Main {
                         .body(new ClientIdBuilder().id(id).build())))
 
                 .post("/acceptances", (request, response) -> request
-                    .bodyAs(ClientOfferDto.class)
-                    .flatMap(offer -> offerResponders.get(offer.id()
-                        .orElseThrow(() -> new HttpServiceRequestException(HttpStatus.BAD_REQUEST)))
+                    .bodyAs(ClientIdDto.class)
+                    .flatMap(offer -> offerResponders.get(offer.id())
                         .accept())
                     .ifSuccess(ignored -> response.status(NO_CONTENT)))
 
                 .post("/counter-offers", (request, response) -> request
-                    .bodyAs(ClientOfferDto.class)
-                    .flatMap(offer -> offerResponders.get(offer.id()
-                        .orElseThrow(() -> new HttpServiceRequestException(HttpStatus.BAD_REQUEST)))
+                    .bodyAs(TrustedContractCounterOfferDto.class)
+                    .flatMap(offer -> offerResponders.get(offer.negotiationId())
                         .offer(new SimplifiedContractCounterOffer.Builder()
                             .validFor(Duration.ofMinutes(3))
                             .contracts(new TrustedContractBuilder()
-                                .templateName(offer.template().name())
-                                .arguments(offer.contract())
+                                .templateName(offer.contracts().get(0).templateName())
+                                .arguments(offer.contracts().get(0).arguments())
                                 .build())
                             .build()))
                     .ifSuccess(ignored -> response.status(NO_CONTENT)))
 
                 .post("/rejections", (request, response) -> request
-                    .bodyAs(ClientOfferDto.class)
-                    .flatMap(offer -> offerResponders.get(offer.id()
-                        .orElseThrow(() -> new HttpServiceRequestException(HttpStatus.BAD_REQUEST)))
+                    .bodyAs(ClientIdDto.class)
+                    .flatMap(offer -> offerResponders.get(offer.id())
                         .reject())
                     .ifSuccess(ignored -> response.status(NO_CONTENT))))
 
@@ -262,9 +295,11 @@ public class Main {
         }
     }
 
-    private static HttpRouteHandler serve(final byte[] data) {
+    private static HttpRouteHandler serve(final byte[] data, final String contentType) {
         return (request, response) -> {
-            response.status(OK).body(data);
+            response.status(OK)
+                .header("content-type", contentType)
+                .body(data);
             return done();
         };
     }
@@ -290,7 +325,7 @@ public class Main {
     }
 
     static {
-        final var logLevel = Level.INFO;
+        final var logLevel = Level.ALL;
         System.setProperty("java.util.logging.SimpleFormatter.format", "%1$tF %1$tT %4$s %5$s%6$s%n");
         final var root = java.util.logging.Logger.getLogger("");
         root.setLevel(logLevel);

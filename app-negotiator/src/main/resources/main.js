@@ -46,36 +46,75 @@ const global = {
     subscribe: (...args) => global.publisher.subscribe(...args),
     unsubscribe: (...args) => global.publisher.unsubscribe(...args),
 
-    me: "plant",
+    me: "",
+    parties: [],
+    templates: [],
 
-    parties: [
-        {
-            name: "plant",
-            label: "Final Assembly Plant"
-        },
-        {
-            name: "carrier",
-            label: "Carrier"
-        },
-        {
-            name: "supplier",
-            label: "Component Supplier"
-        }
-    ],
-
+    inboxOffset: 0,
     definitions: new Map(),
+    negotiations: new Map(),
 
-    partyByName(name) {
+    partyByName: (name) => {
         for (const party of global.parties) {
             if (party.name === name) {
                 return party;
             }
         }
+        if (global.me.name === name) {
+            return global.me;
+        }
         throw "No party named '" + name + "' is known"; 
     },
 
-    deleteJson: (url, headers) => {
-        return global.requestJson("DELETE", url, headers || {}, undefined);
+    templateByName: (name) => {
+        for (const template of global.templates) {
+            if (template.name === name) {
+                return template;
+            }
+        }
+        throw "No template named '" + name + "' is known";
+    },
+
+    negotiationById: (id) => {
+        let negotiation = global.negotiations.get(id);
+        if (typeof negotiation === "undefined" || negotiation === null) {
+            negotiation = {
+                trustedOffers: [],
+                signedOffers: [],
+            };
+            global.negotiations.set(id, negotiation);
+        }
+        return negotiation;
+    },
+
+    definitionDescriptionByNegotiationIdAndHash: (id, hash) => {
+        const negotiation = global.negotiationById(id)
+        if (!negotiation || !negotiation.signedOffers || !negotiation.trustedOffers) {
+            return "[" + id + "] " + hash.substr(0, 22) + "...";
+        }
+        for (let i = negotiation.signedOffers.length; i-- > 0;) {
+            const offer = negotiation.signedOffers[i];
+            for (const offerHash of offer.hashes) {
+                if (hash === offerHash) {
+                    return global.templateByName(negotiation.trustedOffers[i].contracts[0].templateName).label + ", offer " + (i + 1) + " [" + id + "]";
+                }
+            }
+        }
+        if (negotiation.signedAcceptance) {
+            for (const acceptanceHash of negotiation.signedAcceptance.hashes) {
+                if (hash === offerHash) {
+                    return global.templateByName(negotiation.trustedOffers[negotiation.trustedOffers.length - 1].contracts[0].templateName).label + ", acceptance [" + id + "]";
+                }
+            }
+        }
+        if (negotiation.signedRejection) {
+            for (const acceptanceHash of negotiation.signedRejection.hashes) {
+                if (hash === offerHash) {
+                    return global.templateByName(negotiation.trustedOffers[negotiation.trustedOffers.length - 1].contracts[0].templateName).label + ", rejection [" + id + "]";
+                }
+            }
+        }
+        return "[" + id + "] " + hash.substr(0, 22) + "...";
     },
 
     getJson: (url, headers) => {
@@ -311,7 +350,7 @@ class Card extends Widget {
     }
 
     getInput() {
-        const map = new Map();
+        const object = {};
         for (const nodeOrWidget of this.body) {
             if (nodeOrWidget instanceof HashField || nodeOrWidget instanceof InputField) {
                 const value = nodeOrWidget.getValue();
@@ -321,37 +360,47 @@ class Card extends Widget {
                 else {
                     nodeOrWidget.removeClass("error");
                 }
-                map.set(nodeOrWidget.name, value);
+                object[nodeOrWidget.name] = value;
             }
         }
-        return map;
+        return object;
     }
 }
 
 class HashField extends Widget {
     constructor(name, label = null, value = null, isEditable = true) {
         super("span", {"class": "HashField " + name});
-        this.name = name;
-        this.label = name || label;
+        this.name = name + ":hash";
+        this.label = label || name;
         if (isEditable) {
+            this.addClass("editable");
             let hasSelectedOption = false;
-            this.appendChild(this.select = new Widget("select", {}, global.definitions
-                .values()
-                .map(definition => {
-                    const attributes = {"value": value || definition.hashes[0]};
-                    if (value && definition.hashes.some(hash => hash === value)) {
-                        attributes.selected = "selected";
-                        hasSelectedOption = true;
+            const definitions = [];
+            const seenHashes = new Set();
+            outer: for (const definition of global.definitions.values()) {
+                for (const hash of definition.hashes) {
+                    if (seenHashes.has(hash)) {
+                        continue outer;
                     }
-                    return new Widget(
-                        "option",
-                        attributes,
-                        definition.type + " of [" + definition.negotiationId + "]"
-                    );
-                })
-            ));
+                    seenHashes.add(hash);
+                }
+                const attributes = {"value": value || definition.hashes[0]};
+                if (value && definition.hashes.some(hash => hash === value)) {
+                    attributes.selected = "selected";
+                    hasSelectedOption = true;
+                }
+                definitions.push(new Widget(
+                    "option",
+                    attributes,
+                    [global.definitionDescriptionByNegotiationIdAndHash(definition.negotiationId, definition.hashes[0])]
+                ));
+            }
+            this.appendChild(this.select = new Widget("select", {}, definitions));
             if (!hasSelectedOption) {
-                this.select.prependChild(new Widget("option", {"selected", "selected"}, "{" + this.label + "}"));
+                this.select.prependChild(new Widget("option", {
+                    "selected": "selected",
+                    "value": ""
+                }, ["{" + this.label + "}"]));
                 if (value) {
                     console.log("No definition exists with the hash " + value);
                 }
@@ -359,15 +408,28 @@ class HashField extends Widget {
             this._getValue = () => (this.select.$element.value || "").trim();
         }
         else {
-            const definition = global.definitions.get(value);
-            if (!definition) {
-                console.log("No definition exists with the hash " + value);
-                this.addClass("empty");
-                this.appendChild(label || name);
-                this._getValue = () => "";
-                return;
-            }
-            this.appendChild(definition.type + " of [" + definition.negotiationId + "]");
+            let didRetry = false;
+            let f;
+            f = () => {
+                const definition = value ? global.definitions.get(value) : null;
+                if (!definition) {
+                    if (value) {
+                        console.log("No definition exists with the hash " + value);
+                        if (didRetry === false) {
+                            didRetry = true;
+                            console.log("Trying again in 500 ms ...");
+                            setTimeout(f, 500);
+                            return;
+                        }
+                    }
+                    this.addClass("empty");
+                    this.appendChild(label || name);
+                    this._getValue = () => "";
+                    return;
+                }
+                this.appendChild(global.definitionDescriptionByNegotiationIdAndHash(definition.negotiationId, definition.hashes[0]));
+            };
+            f();
             this._getValue = () => value;
         }
     }
@@ -520,12 +582,13 @@ class Modal extends Widget {
 
 class CounterOfferDialog extends Card {
     constructor(id, offer) {
+        const template = global.templateByName(offer.contracts[0].templateName);
         const labelWithReceiver = new Widget("span", {}, [
-            "Make Counter-Offer ", new Widget("i", {}, [template.label]), " for ", new InputField(
-                "receiver", "receiver", global.partyByName(offer.receiver).label, false
+            "Offer ", new Widget("i", {}, [template.label]), " to ", new InputField(
+                "receiver", "receiver", global.partyByName(offer.offerorName).label, false
             ),
         ]);
-        super("CounterOfferDialog", labelWithReceiver, templateTextToStringsAndWidgets(template.text, offer.contract, true), [
+        super("CounterOfferDialog", labelWithReceiver, templateTextToStringsAndWidgets(template.text, offer.contracts[0].arguments, true), [
             new Action("submit", "Submit Counter-Offer", () => {
                 const submission = this.validateAndCollectSubmission();
                 if (submission) {
@@ -535,22 +598,31 @@ class CounterOfferDialog extends Card {
             }),
             new Action("cancel", "Cancel", () => global.publish("dialog.hide")),
         ]);
+        this.id = id;
         this.offer = offer;
     }
 
     validateAndCollectSubmission() {
         let hasError = false;
 
-        const receiver = this.offer.receiver.getValue();
+        const receiver = this.offer.offerorName;
         const contract = this.getInput();
-        for (const [key, value] of contract.entries()) {
+        for (const [key, value] of Object.entries(contract)) {
             if ((value || "").trim().length === 0) {
                 hasError = true;
             }
         }
         return hasError
             ? null
-            : {receiver, contract, template: this.offer.template};
+            : {
+                negotiationId: this.id,
+                offerorName: global.me.name,
+                receiverName: this.offer.offerorName,
+                validAfter: this.offer.validAfter,
+                validUntil: this.offer.validUntil,
+                contracts: [{templateName: this.offer.contracts[0].templateName, arguments: contract}],
+                offeredAt: this.offer.offeredAt,
+            };
     }
 }
 
@@ -559,7 +631,7 @@ class OfferDialog extends Card {
         let receiver;
         const labelWithPartySelector = new Widget("span", {}, [
             "Offer ", new Widget("i", {}, [template.label]), " to ", receiver = new InputSelector(
-                "receiver", "receiver", global.parties.filter(party => party.name !== global.me)
+                "receiver", "receiver", global.parties.filter(party => party.name !== global.me.name)
             )
         ]);
         super("OfferDialog", labelWithPartySelector, templateTextToStringsAndWidgets(template.text, {}, true), [
@@ -586,7 +658,7 @@ class OfferDialog extends Card {
             hasError = true;
         }
         const contract = this.getInput();
-        for (const [key, value] of contract.entries()) {
+        for (const [key, value] of Object.entries(contract)) {
             if ((value || "").trim().length === 0) {
                 hasError = true;
             }
@@ -672,81 +744,82 @@ class ContractReceived extends Card {
 }
 
 class MessageSent extends Card {
-    constructor(id, offer, className, actionLabel, directionLabel, message) {
+    constructor(id, offer, receiver, className, actionLabel, directionLabel, message) {
         const timestamp = new Widget("div", {"class": "timestamp"}, [new Date().toISOString()]);
+        const template = global.templateByName(offer.contracts[0].templateName);
         const labelWithIdTimestampAndReceiver = new Widget("div", {}, [
             timestamp,
             new Widget("div", {}, [
                 actionLabel + " ",
-                new Widget("i", {}, [offer.template.label]),
+                new Widget("i", {}, [template.label]),
                 new Widget("span", {"class":"meta"}, [" [", id, "]"]),
                 " " + directionLabel + " ",
-                new Widget ("i", {}, [global.partyByName(offer.receiver).label])
+                new Widget ("i", {}, [global.partyByName(receiver).label])
             ]),
         ]);
-        const text = templateTextToStringsAndWidgets(offer.template.text, offer.contract, false);
+        const text = templateTextToStringsAndWidgets(template.text, offer.contracts[0].arguments, false);
         super(className, labelWithIdTimestampAndReceiver, text, message ? [
             new Widget("span", {"class": "Label"}, [message]),
-        ] : null);
+        ] : []);
         this.id = id;
     }
 }
 
 class AcceptSent extends MessageSent {
-    constructor(id, offer) {
-        super(id, offer, "AcceptSent", "Accepted", "from", "Accepted contract saved to 'Contracts' section.");
+    constructor(id, offer, receiver) {
+        super(id, offer, receiver, "AcceptSent", "Accepted", "from", "Accepted contract saved to 'Contracts' section.");
     }
 }
 
 class OfferSent extends MessageSent {
-    constructor(id, offer) {
-        super(id, offer, "OfferSent", "Offered", "to", "Awaiting response ...");
+    constructor(id, offer, receiver) {
+        super(id, offer, receiver, "OfferSent", "Offered", "to", "Awaiting response ...");
     }
 }
 
 class CounterOfferSent extends MessageSent {
-    constructor(id, offer) {
-        super(id, offer, "CounterOfferSent", "Countered ", "from", "Awaiting response ...")
+    constructor(id, offer, receiver) {
+        super(id, offer, receiver, "CounterOfferSent", "Countered ", "from", "Awaiting response ...")
     }
 }
 
 class RejectSent extends MessageSent {
-    constructor(id, offer) {
-        super(id, offer, "RejectSent", "Rejected", "from");
+    constructor(id, offer, receiver) {
+        super(id, offer, receiver, "RejectSent", "Rejected", "from");
     }
 }
 
 class MessageReceived extends Card {
-    constructor(id, offer, className, actionName, children) {
-        const timestamp = new Widget("div", {"class": "timestamp"}, [new Date().toISOString()]);
+    constructor(id, offer, sender, className, actionName, children) {
+        const contract = offer.contracts[0];
+        const template = global.templateByName(contract.templateName);
+        const timestamp = new Widget("div", {"class": "timestamp"}, [offer.offeredAt || new Date().toISOString()]);
         const labelWithIdTimestampAndSender = new Widget("div", {}, [
             timestamp,
             new Widget("div", {}, [
-                new Widget ("i", {}, [global.partyByName(offer.sender).label]),
+                new Widget ("i", {}, [global.partyByName(sender).label]),
                 " " + actionName + " ",
-                new Widget("i", {}, [offer.template.label]),
+                new Widget("i", {}, [template.label]),
                 new Widget("span", {"class":"meta"}, [" [", id, "]"]),
-                " from ",
-                
             ]),
         ]);
-        const text = templateTextToStringsAndWidgets(offer.template.text, offer.contract, false);
-        super(className, labelWithIdTimestampAndReceiver, text, children);
+        const text = templateTextToStringsAndWidgets(template.text, contract.arguments, false);
+        super(className, labelWithIdTimestampAndSender, text, children);
         this.id = id;
     }
 }
 
 class AcceptReceived extends MessageReceived {
-    constructor(id, offer) {
-        super(id, offer, "AcceptReceived", "Accepted", [
+    constructor(id, offer, sender) {
+        super(id, offer, sender, "AcceptReceived", "Accepted", [
             new Widget("span", {"class": "Label"}, ["Accepted contract saved to 'Contracts' section."])
         ]);
     }
 }
 
 class OfferReceived extends MessageReceived {
-    constructor(id, offer) {
-        super(id, offer, "OfferReceived", "Offered", [
+    constructor(id, offer, sender) {
+        super(id, offer, sender, "OfferReceived", "offered", [
             new Action("accept", "Accept", () => global.publish("offer.accept", {id, offer})),
             new Action("counter", "Counter", () => global.publish("dialog.show.counterOffer", {id, offer})),
             new Action("reject", "Reject", () => global.publish("offer.reject", {id, offer})),
@@ -755,8 +828,8 @@ class OfferReceived extends MessageReceived {
 }
 
 class RejectReceived extends MessageReceived {
-    constructor(id, offer) {
-        super(id, offer, "RejectReceived", "Rejected");
+    constructor(id, offer, sender) {
+        super(id, offer, sender, "RejectReceived", "Rejected");
     }
 }
 
@@ -815,93 +888,146 @@ function main() {
         console.clear();
 
         global.getJson("/ui/me")
-            .then(me => global.me = me.name);
+            .then(me => {
+                global.me = me;
+                document.getElementById("user").innerText = me.label;
+            });
 
         global.getJson("/ui/parties")
             .then(parties => global.parties = parties);
 
         global.getJson("/ui/templates")
             .then(templates => {
-                layoutTemplates.clearChildren();
-                layoutTemplates.appendChildren(templates);
+                global.templates = templates;
+                layoutTemplates.body.clearChildren();
+                layoutTemplates.body.appendChildren(templates.map(template => new Template(template)));
             });
 
-        global.deleteJson("/ui/inbox/entries")
+        global.getJson("/ui/inbox/entries?from=" + global.inboxOffset)
             .then(entries => {
-                for (const entry of entries) {
-                    let child, definition;
-                    switch (entry.type) {
-                    case "DEFINITION":
-                        child = (entry.definition || {});
-                        if (child.acceptance) {
-                            definition = child.acceptance;
-                            definition.type = "Acceptance";
+                global.inboxOffset += entries.length;
+
+                let failures = [];
+                for (let i = 0; i < 5; ++i) {
+                    for (const entry of entries) {
+                        try {
+                            var child, definition, template;
+                            switch (entry.type) {
+                            case "DEFINITION":
+                                child = (entry.definition || {});
+                                if (child.acceptance) {
+                                    definition = child.acceptance;
+                                    definition.type = "acceptance";
+                                    global.negotiationById(entry.id)
+                                        .signedAcceptance = definition;
+                                }
+                                else if (child.offer) {
+                                    definition = child.offer;
+                                    definition.type = "offer";
+                                    if (entry.id > 0) {
+                                        global.negotiationById(entry.id)
+                                            .signedOffers
+                                            .push(definition);
+                                    }
+                                }
+                                else if (child.rejection) {
+                                    definition = child.rejection;
+                                    definition.type = "rejection";
+                                    global.negotiationById(entry.id)
+                                        .signedRejection = definition;
+                                }
+                                else {
+                                    console.log("Received empty or unrecognized type of definition entry", entry);
+                                    break;
+                                }
+                                if (Array.isArray(child.hashes)) {
+                                    definition.hashes = child.hashes.map(hash => hash.algorithm + ":" + hash.sum);
+                                    for (const hash of definition.hashes) {
+                                        global.definitions.set(hash, definition);
+                                    }
+                                }
+                                else {
+                                    console.log("Received definition entry contains no hashes", entry);
+                                }
+                                continue;
+
+                            case "OFFER_ACCEPT":
+                                global.negotiationById(entry.id)
+                                    .trustedOffers
+                                    .push(entry.offer);
+                                child = new AcceptReceived(entry.id, entry.offer, entry.offer.receiverName);
+
+                                template = global.templateByName(entry.offer.contracts[0].templateName);
+                                layoutContracts.body.prependChild(new Contract(entry.id, template.label, entry.offer.contracts[0].arguments, template.text, [
+                                    global.partyByName(entry.offer.receiverName).label,
+                                    global.partyByName(entry.offer.offerorName).label,
+                                ]));
+                                break;
+                            case "OFFER_REJECT":
+                                global.negotiationById(entry.id)
+                                    .trustedOffers
+                                    .push(entry.offer);
+                                child = new RejectReceived(entry.id, entry.offer, entry.offer.receiverName);
+                                break;
+                            case "OFFER_SUBMIT":
+                                global.negotiationById(entry.id)
+                                    .trustedOffers
+                                    .push(entry.offer);
+                                child = new OfferReceived(entry.id, entry.offer, entry.offer.offerorName);
+                                break;
+
+                            case "OFFER_FAULT":
+                                child = layoutInbox.body.getFirstChildMatching(child => {
+                                    return child instanceof Widget && child.id === entry.id;
+                                });
+                                if (child) {
+                                    child.status.setError(entry.error);
+                                }
+                                continue;
+                            case "OFFER_EXPIRY":
+                                child = layoutInbox.body.getFirstChildMatching(child => {
+                                    return child instanceof Widget && child.id === entry.id;
+                                });
+                                if (child) {
+                                    child.status.setWarning("This offer has expired.");
+                                }
+                                continue;
+
+                            default:
+                                console.log("Received entry with unexpected type", entry);
+                                continue;
+                            }
+                            if (entry.id) {
+                                layoutInbox.body.removeFirstChildMatching(child => {
+                                    return child instanceof Widget && child.id === entry.id;
+                                });
+                            }
+                            layoutInbox.body.prependChild(child);
                         }
-                        else if (child.offer) {
-                            definition = child.offer;
-                            definition.type = "Offer";
-                        }
-                        else if (child.rejection) {
-                            definition = child.rejection;
-                            definition.type = "Rejection";
-                        }
-                        else {
-                            console.log("Received empty or unrecognized type of definition entry", entry);
-                            break;
-                        }
-                        if (Array.isArray(child.hashes)) {
-                            child.hashes = child.hashes.map(hash => hash.algorithm + ":" + hash.sum);
-                            for (const hash of child.hashes) {
-                                global.definitions.set(hash, definition);
+                        catch (error) {
+                            if (i < 2) {
+                                failures.push(entry);
+                            }
+                            else {
+                                console.log(error);
                             }
                         }
-                        else {
-                            console.log("Received definition entry contains no hashes", entry);
-                        }
-                        continue;
-
-                    case "OFFER_ACCEPT":
-                        child = new AcceptReceived(entry.id, entry.offer);
-                        break;
-                    case "OFFER_REJECT":
-                        child = new RejectReceived(entry.id, entry.offer);
-                        break;
-                    case "OFFER_SUBMIT":
-                        child = new OfferReceived(entry.id, entry.offer);
-                        break;
-
-                    case "OFFER_FAULT":
-                        child = layoutInbox.body.getFirstChildMatching(child => {
-                            return child instanceof Widget && child.id === entry.id;
-                        });
-                        if (child) {
-                            child.status.setError(entry.error);
-                        }
-                        continue;
-                    case "OFFER_EXPIRY":
-                        child = layoutInbox.body.getFirstChildMatching(child => {
-                            return child instanceof Widget && child.id === entry.id;
-                        });
-                        if (child) {
-                            child.status.setWarning("This offer has expired.");
-                        }
-                        continue;
-
-                    default:
-                        console.log("Received entry with unexpected type", entry);
-                        continue;
                     }
-                    if (entry.id) {
-                        layoutInbox.body.removeFirstChildMatching(child => {
-                            return child instanceof Widget && child.id === entry.id;
-                        });
+                    if (failures.length > 0) {
+                        entries = failures;
+                        failures = [];
                     }
-                    layoutInbox.body.prependChild(child);
+                    else {
+                        return;
+                    }
                 }
             });
     };
     refresh();
-    setInterval(refresh, 10000);
+    //const rid = setInterval(refresh, 10000);
+    //document.getElementById("stop")
+    //    .addEventListener("click", () => clearInterval(rid));
+
     document.getElementById("refresh")
         .addEventListener("click", () => global.publish("refresh"));
 
@@ -924,16 +1050,21 @@ function main() {
     global.subscribe("offer.submit", offer => {
         global.postJson("/ui/offers", {}, offer)
             .then(response => {
-                layoutInbox.body.prependChild(new OfferSent(response.id, offer));
-            });
+                layoutInbox.body.prependChild(new OfferSent(response.id, {
+                    offerorName: global.me.name,
+                    receiverName: offer.receiver,
+                    contracts: [{templateName: offer.template.name, arguments: offer.contract}],
+                }, offer.receiver));
+            })
+            .catch(error => console.log(error));
     });
 
-    const handleEntryError = error => {
-        const entry0 = layoutInbox.getFirstChildMatching(child => {
-            return child instanceof Widget && child.id === entry.id;
+    const handleIdError = id => error => {
+        const entry = layoutInbox.getFirstChildMatching(child => {
+            return child instanceof Widget && child.id === id;
         });
-        if (entry0) {
-            entry0.status.setError(JSON.stringify(error));
+        if (entry) {
+            entry.status.setError(JSON.stringify(error));
         }
         else {
             console.log(error);
@@ -944,27 +1075,34 @@ function main() {
         layoutInbox.body.removeFirstChildMatching(child => {
             return child instanceof Widget && child.id === entry.id;
         });
-        layoutInbox.body.prependChild(new AcceptSent(entry.id, entry.offer));
+        layoutInbox.body.prependChild(new AcceptSent(entry.id, entry.offer, entry.offer.offerorName));
+
+        const template = global.templateByName(entry.offer.contracts[0].templateName);
+        layoutContracts.body.prependChild(new Contract(entry.id, template.label, entry.offer.contracts[0].arguments, template.text, [
+            global.partyByName(entry.offer.receiverName).label,
+            global.partyByName(entry.offer.offerorName).label,
+        ]));
+
         global.postJson("/ui/acceptances", {}, entry)
-            .catch(handleEntryError);
+            .catch(handleIdError(entry.id));
     });
 
-    global.subscribe("offer.counter", entry => {
+    global.subscribe("offer.counter", offer => {
         layoutInbox.body.removeFirstChildMatching(child => {
-            return child instanceof Widget && child.id === entry.id;
+            return child instanceof Widget && child.id === offer.negotiationId;
         });
-        layoutInbox.body.prependChild(new CounterOfferSent(entry.id, entry.offer));
-        global.postJson("/ui/counter-offers", {}, entry)
-            .catch(handleEntryError);
+        layoutInbox.body.prependChild(new CounterOfferSent(offer.negotiationId, offer, offer.receiverName));
+        global.postJson("/ui/counter-offers", {}, offer)
+            .catch(handleIdError(offer.negotiationId));
     });
 
     global.subscribe("offer.reject", entry => {
         layoutInbox.body.removeFirstChildMatching(child => {
             return child instanceof Widget && child.id === entry.id;
         });
-        layoutInbox.body.prependChild(new RejectSent(entry.id, entry.offer));
+        layoutInbox.body.prependChild(new RejectSent(entry.id, entry.offer, entry.offer.offerorName));
         global.postJson("/ui/rejections", {}, entry)
-            .catch(handleEntryError);
+            .catch(handleIdError(entry.id));
     });
 
     global.subscribe("refresh", refresh);

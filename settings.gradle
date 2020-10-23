@@ -1,1 +1,1 @@
-include ':app-negotiator', ':app-forecaster'
+include ':app-configurator', ':app-negotiator', ':app-forecaster'

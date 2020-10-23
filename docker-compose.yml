@@ -1,0 +1,182 @@
+version: "3"
+
+services:
+
+  # UTILITY CONTAINERS
+
+  mysql.p4sc:
+    container_name: mysql.p4sc
+    image: mysql:5.7
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+    volumes:
+      - vol.mysql.p4sc:/var/lib/mysql
+      - ./scripts/arrowhead.sql:/docker-entrypoint-initdb.d/arrowhead.sql
+
+  configurator.p4sc:
+    container_name: configurator.p4sc
+    build: app-configurator
+    volumes:
+      - ./config/crypto/sysop.p12:/opt/keystore.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/network-topology.json:/opt/config.json
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9999:9999
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh supplier-proxy.p4sc 9903 3 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar app.jar"]
+
+  # CORE SYSTEMS
+
+  authorization.p4sc:
+    container_name: authorization.p4sc
+    image: svetlint/authorization:4.1.3
+    volumes:
+      - ./config/crypto/system.authorization.p12:/authorization/keystore.p12
+      - ./config/crypto/truststore.p12:/authorization/truststore.p12
+      - ./config/properties/all-authorization.properties:/authorization/application.properties
+      - ./scripts/wait-for.sh:/authorization/wait-for.sh
+    ports:
+      - 8445:8445
+    command: ["/bin/bash", "-c", "cd /authorization && ./wait-for.sh service-registry.p4sc 8443 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar arrowhead-authorization.jar"]
+
+  orchestrator.p4sc:
+    container_name: orchestrator.p4sc
+    image: svetlint/orchestrator:4.1.3
+    volumes:
+      - ./config/crypto/system.orchestrator.p12:/orchestrator/keystore.p12
+      - ./config/crypto/truststore.p12:/orchestrator/truststore.p12
+      - ./config/properties/all-orchestrator.properties:/orchestrator/application.properties
+      - ./scripts/wait-for.sh:/orchestrator/wait-for.sh
+    ports:
+      - 8441:8441
+    command: ["/bin/bash", "-c", "cd /orchestrator && ./wait-for.sh authorization.p4sc 8445 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar arrowhead-orchestrator.jar"]
+
+  service-registry.p4sc:
+    container_name: service-registry.p4sc
+    image: svetlint/serviceregistry:4.1.3
+    volumes:
+      - ./config/crypto/system.service_registry.p12:/serviceregistry/keystore.p12
+      - ./config/crypto/truststore.p12:/serviceregistry/truststore.p12
+      - ./config/properties/all-service-registry.properties:/serviceregistry/application.properties
+      - ./scripts/wait-for.sh:/serviceregistry/wait-for.sh
+    ports:
+      - 8443:8443
+    command: ["/bin/bash", "-c", "cd /serviceregistry && ./wait-for.sh mysql.p4sc 3306 0 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar arrowhead-serviceregistry.jar"]
+
+  event-handler.p4sc:
+    container_name: event-handler.p4sc
+    image: svetlint/eventhandler:4.1.3
+    volumes:
+      - ./config/crypto/system.event_handler.p12:/eventhandler/keystore.p12
+      - ./config/crypto/truststore.p12:/eventhandler/truststore.p12
+      - ./config/properties/all-event-handler.properties:/eventhandler/application.properties
+      - ./scripts/wait-for.sh:/eventhandler/wait-for.sh
+    ports:
+      - 8455:8455
+    command: ["/bin/bash", "-c", "cd /eventhandler && ./wait-for.sh orchestrator.p4sc 8441 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar arrowhead-eventhandler.jar"]
+
+  # CARRIER SYSTEMS
+
+  carrier-agent-booking.p4sc:
+    container_name: carrier-agent-booking.p4sc
+    build: app-negotiator
+    volumes:
+      - ./config/templates:/opt/templates
+      - ./config/crypto/system.carrier-agent-booking.p12:/opt/keystore.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/carrier-agent-booking.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9001:9001
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh configurator.p4sc 9999 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar app.jar"]
+
+  carrier-proxy.p4sc:
+    container_name: carrier-proxy.p4sc
+    image: arrowhead-contract-proxy:latest
+    volumes:
+      - ./config/templates:/opt/templates
+      - ./config/crypto/system.carrier-proxy.p12:/opt/keystore.p12
+      - ./config/crypto/parties/counter-parties.carrier.p12:/opt/counter-parties.p12
+      - ./config/crypto/parties/owned-parties.carrier.p12:/opt/owned-parties.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/carrier-proxy.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9901:9901
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh event-handler.p4sc 8455 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -Djava.util.logging.config.file=/opt/application.properties -jar arrowhead-contract-proxy.jar"]
+
+  # PLANT SYSTEMS
+
+  plant-agent-purchasing.p4sc:
+    container_name: plant-agent-purchasing.p4sc
+    build: app-negotiator
+    volumes:
+      - ./config/templates:/opt/templates
+      - ./config/crypto/system.plant-agent-purchasing.p12:/opt/keystore.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/plant-agent-purchasing.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9002:9002
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh carrier-agent-booking.p4sc 9001 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar app.jar"]
+
+  plant-proxy.p4sc:
+    container_name: plant-proxy.p4sc
+    image: arrowhead-contract-proxy:latest
+    volumes:
+      - ./config/templates:/opt/templates
+      - ./config/crypto/system.plant-proxy.p12:/opt/keystore.p12
+      - ./config/crypto/parties/counter-parties.plant.p12:/opt/counter-parties.p12
+      - ./config/crypto/parties/owned-parties.plant.p12:/opt/owned-parties.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/plant-proxy.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9902:9902
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh carrier-proxy.p4sc 9901 10 && java -XX:+UseSerialGC -Xmx1G -Xms32m -Djava.util.logging.config.file=/opt/application.properties -jar arrowhead-contract-proxy.jar"]
+
+  # SUPPLIER SYSTEMS
+
+  supplier-agent-forecasting.p4sc:
+    container_name: supplier-agent-forecasting.p4sc
+    build: app-negotiator
+    volumes:
+      - ./config/crypto/system.supplier-agent-forecasting.p12:/opt/keystore.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/supplier-agent-forecasting.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9803:9803
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh supplier-agent-sales.p4sc 9003 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar app.jar"]
+
+  supplier-agent-sales.p4sc:
+    container_name: supplier-agent-sales.p4sc
+    build: app-negotiator
+    volumes:
+      - ./config/templates:/opt/templates
+      - ./config/crypto/system.supplier-agent-sales.p12:/opt/keystore.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/supplier-agent-sales.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9003:9003
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh plant-agent-purchasing.p4sc 9002 1 && java -XX:+UseSerialGC -Xmx1G -Xms32m -jar app.jar"]
+
+  supplier-proxy.p4sc:
+    container_name: supplier-proxy.p4sc
+    image: arrowhead-contract-proxy:latest
+    volumes:
+      - ./config/templates:/opt/templates
+      - ./config/crypto/system.supplier-proxy.p12:/opt/keystore.p12
+      - ./config/crypto/parties/counter-parties.supplier.p12:/opt/counter-parties.p12
+      - ./config/crypto/parties/owned-parties.supplier.p12:/opt/owned-parties.p12
+      - ./config/crypto/truststore.p12:/opt/truststore.p12
+      - ./config/properties/supplier-proxy.properties:/opt/application.properties
+      - ./scripts/wait-for.sh:/opt/wait-for.sh
+    ports:
+      - 9903:9903
+    command: ["/bin/bash", "-c", "cd /opt && ./wait-for.sh plant-proxy.p4sc 9902 10 && java -XX:+UseSerialGC -Xmx1G -Xms32m -Djava.util.logging.config.file=/opt/application.properties -jar arrowhead-contract-proxy.jar"]
+
+volumes:
+  vol.mysql.p4sc:
+    external: false

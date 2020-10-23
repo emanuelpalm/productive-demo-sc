@@ -111,7 +111,7 @@ public class Config {
                 final var text = Files.readString(Path.of(pathString), StandardCharsets.UTF_8);
                 final var label = parts.length == 2 ? parts[1].trim() : pathString;
                 list.add(new ClientTemplateBuilder()
-                    .name(pathString)
+                    .name(Path.of(pathString).getFileName().toString())
                     .label(label)
                     .text(text)
                     .build());

@@ -61,7 +61,7 @@ body,
 }
 
 #modal > * {
-    max-width: 35rem;
+    max-width: 38rem;
     opacity: 0.0;
     transition-property: opacity, transform;
     transition-duration: 0.25s;
@@ -73,23 +73,39 @@ body,
     transform: translate(0, 0);
 }
 
-#refresh {
+#user {
+    background-color: #DDD;
+    border-radius: 0 0 0.5rem 0;
+    font-weight: bold;
+    left: 0;
+    padding: 0.5rem;
+    position: absolute;
+    top: 0;
+}
+
+#debug {
+    display: flex;
+    flex-direction: row;
+    padding: 0.5rem;
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+
+#debug > * {
     background-color: #AAA;
     border-radius: 0.2rem;
     color: white;
     cursor: pointer;
     font-size: 0.9rem;
+    margin-left: 0.5rem;
     padding: 0.33rem 0.5rem;
     text-align: center;
-    position: absolute;
-    right: 0.5rem;
-    top: 0.5rem;
 }
 
-#refresh:hover {
+#debug > *:hover {
     background-color: #626573;
 }
-
 
 .inbox .timestamp {
     color: #888;
@@ -190,6 +206,7 @@ body,
     margin-inline-end: 1rem;
 }
 
+.HashField:not(.editable),
 .InputField {
     border: 0.1rem solid #93bfc1;
     border-radius: 0.15rem;
@@ -202,24 +219,32 @@ body,
     color: #b35308;
 }
 
+.HashField:not(.editable),
 .InputField[contenteditable="false"] {
     background-color: #F3F3F3;
     border-color: #AAA;
     color: #666;
 }
 
+.HashField.empty:not(.editable),
 .InputField.empty[contenteditable="false"] {
     background-color: white;
     border: none;
     color: #b35308;
 }
 
+.HashField.empty::before,
 .InputField.empty::before {
     content: '{';
 }
 
+.HashField.empty::after,
 .InputField.empty::after {
     content: '}';
+}
+
+.HashField.error > select {
+    color: #9f0a03 !important;
 }
 
 .InputField.empty.error {

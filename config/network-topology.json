@@ -1,0 +1,174 @@
+{
+  "interfaces": [
+    "HTTP-SECURE-HTML",
+    "HTTP-SECURE-SVG",
+    "HTTP-SECURE-JS",
+    "HTTP-SECURE-CSS",
+    "HTTP-SECURE-JSON"
+  ],
+  "serviceRegistryHost": "service-registry.p4sc:8443",
+  "providers": [
+    {
+      "address": "carrier-agent-booking.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0DwXI7atPh3esIsllKECBztX8hk1Gbxbd+gknlIc5efShfLXAvXbMpFtNJ3kAqLyyuqP3mzlyaTuR03uSFtF9wZoN2fgzrHTsnil9WqUxKDu39tASd/P/1D00nZEUpUcUTXMf1CdgFhIKKsMjskS9GT48TsJ/PcUKVv2XFg4PpW1eA/bsqu2j33Dm6TJLvhHR8JbMk00U6qhB6f9K9GZ96VAsllcx4tc7HqgWdVDnUtojn/wIBQTVNtXRee+EFFVgJODukGInZ3FSjyIdcp9y8GeF1KzIpwsILICHYHmcZgAjqC0VNis9Srac8vFsg2XLu8Bp52UH9tK5opcMydWPQIDAQAB",
+      "port": 9001,
+      "systemName": "carrier-agent-booking"
+    },
+    {
+      "address": "carrier-proxy.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlqYywjM3S+r75ZlH4VICmxb3LTdYfoI7QiN4dnNDHKlBeN/PyR9IPzmdFCEk3EOXgnTig+twP9fy5i4kDVXHjsb8gP0q7V+sTrTN0fLhkIwKKlRv82EGwCH52kspYWGWaoTaMj28dpCrLKYEci4lWAvjRqVlqUEF7NUL/5IkiAg4UVxQiHIxH+vd3nFpHc4XwUOlZgdDOVLhGB1DvIg5P6pnjiwBHdFfAJebwNfSoO7HOzE1HdTpIPgO/h6akoyanwl9mO4C8ZAjzCa1WhCoRLxiB0bX/HK8reTLd4ln1QFfMNhb1dx7Cqq4/6VPeswoeHyKlvSU+H0PwO7zubWgjQIDAQAB",
+      "port": 9901,
+      "systemName": "carrier-proxy"
+    },
+    {
+      "address": "plant-agent-purchasing.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1Eowscv6XHixo9G8RqTKKDWhc4a+Novjsf8F95nJshOHqV/oTXWgsb94t/0Sft0+a9Y/EvyaVbAk0b0zOmogpwhIHy+/67aU+rhL00AHZq8GPF95x9Pvr8dnZBZwzvdr5NwtK+iiqMWLB50t0DrutYnupBHadMNsqILVkyPdvBSzhLYYp5ZNWopOaIoSjZJsrjhYvfn/efZzBKyxdXipdZe8EVQwVyx3ZCy4wTpuM9v+x+wyhHnbR4i8Xy2eQiIHS42TG06PXJ/j5HJtqCsG9D5RA8WZ1yQFk5fN7f5+0YRNKGqCxAzX/YhaUiXg1iV8Fg1KXkhAMk9dN6kw3rHt2QIDAQAB",
+      "port": 9002,
+      "systemName": "plant-agent-purchasing"
+    },
+    {
+      "address": "plant-proxy.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAgz/hnKlMzHoRf7En1O4KWs16+rp/nLoayweZ7853Ur879OcbQNt3YJXCst4FebZcilfc+ipogodif07X7AM/curovwyhsQQYde10lHb5yqpLIy1uU99Xh/Qr9TvoP66nqLnobGdJUhNFnBquz04yWLiuAWy4mO1bnvbHRU15mDOMl4SS1EBS6/Kv3iNgWhy2ujeZeiibrwE3d2C0XZLu6WsiOmHJ0zj8D7MhqyluCsBaE4lpqcQlcPYgTc+LXmdJCqeV6bTBZQ9vSiDT0mSJAkBobP2l0MMjZwMT9zOuptBkh/gCPiUTVYbCkq1VAUlb9UprpiuHCv5StgavLqV7UwIDAQAB",
+      "port": 9902,
+      "systemName": "plant-proxy"
+    },
+    {
+      "address": "supplier-agent-forecasting.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAllJ5q18oaILoVYvRdCTUAwtbuC0X4McK1O5ijEtlj/fCFaNCA10HEMOnUgJtd3Pt4XQ7ihd1OV3Z4POCiFC14CAT7W2+CofbDqXGz6Tcmihv+Y2C3oqV+6hMdT45HwmKDcaRqrxoF+b6kq+6JYrUsoHpNOwnlY94gR4NI7UBLFOf8AP9Bs43p9tpGGck449xvdK1G3007HMt2woLVT18XCH5z3HM/QjGIRS7eY0NShNM8d5Q65msuEbY/y2Y+LT6ayCOzpEAhBpgdpsymty9SUWWUPVsSfoIR5k0KDXG7+gpQ+LKaZgrY4rRzcJFyq1b++LlPGe3YtZDx+5bz2BdSQIDAQAB",
+      "port": 9803,
+      "systemName": "supplier-agent-forecasting"
+    },
+    {
+      "address": "supplier-agent-sales.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3Y6WN0jgEJxb3R8IGi9IzsrRkYPHHp9WOG/k8PYl5SSwhVf8XejVUID+1/0agHb8+Bnxth9CCEbiQUlv0bBjP2qgq7X8NbUvQejJo9pzcKJIG+n23llvs2MvvmiMdD8v6SrUmzvXzMB6F80VjMXs6ZXuJjk4+InyUNJcotJHVq8IN4SZJjGiNHfeezgGE9ctYWFGJurnShKn+CrscOH56Dbp+FTC76QZd1nY1mh2JqvlFp9hFh9Xb/T6FtvoKX/mVvYlgXi4Vevc3GUjFB4Xz233xXx+PSAEvHEX3aRDXgGsbrC8uok3PatwvSNxDoOq4Pl5o47uizWoP/pS1D7sawIDAQAB",
+      "port": 9003,
+      "systemName": "supplier-agent-sales"
+    },
+    {
+      "address": "supplier-proxy.p4sc",
+      "authenticationInfo": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA+DFhDfYag2KipLwGV1d+cLHRclebnam3wES+xBTf2S1j05SKyXGbQWzhRkcq5C33wLkke6DpqMbCiF2KwJvCNgrKFvcYRgGfjQhyumIFauBRMB3ibnMvFtG1rEoEpLeYfkXnjyjJEc6WNxcNeGy9HLchU43R5sBjojS9Qx9oO82xccRrOdE/VSUKI9MY/qLpe90AZSGeLqVu6wcGAVQym/VDAYNYirdPQVnJsIWNf9nYj0OmQNVYqwF/E52cY6cT84PAiy07a/3crKbsT9QkR5kS/jdOON9Y6uygpZf+PLbPAuqTmUhcOSF6FfiMgxECUK726Qx9lOVmErb+bDWNhQIDAQAB",
+      "port": 9903,
+      "systemName": "supplier-proxy"
+    }
+  ],
+  "services": [
+    {
+      "serviceDefinition": "event-subscriber",
+      "providerIndex": 0,
+      "serviceUri": "/events/carrier-agent-booking",
+      "secure": "CERTIFICATE",
+      "interfaces": ["HTTP-SECURE-JSON"]
+    },
+    {
+      "serviceDefinition": "event-subscriber",
+      "providerIndex": 2,
+      "serviceUri": "/events/plant-agent-purchasing",
+      "secure": "CERTIFICATE",
+      "interfaces": ["HTTP-SECURE-JSON"]
+    },
+    {
+      "serviceDefinition": "event-subscriber",
+      "providerIndex": 4,
+      "serviceUri": "/events/supplier-agent-forecasting",
+      "secure": "CERTIFICATE",
+      "interfaces": ["HTTP-SECURE-JSON"]
+    },
+    {
+      "serviceDefinition": "event-subscriber",
+      "providerIndex": 5,
+      "serviceUri": "/events/supplier-agent-sales",
+      "secure": "CERTIFICATE",
+      "interfaces": ["HTTP-SECURE-JSON"]
+    }
+  ],
+  "rules": [
+    {
+      "consumer": "carrier-agent-booking",
+      "services": ["event-subscribe", "event-unsubscribe"],
+      "providers": ["event_handler"]
+    },
+    {
+      "consumer": "plant-agent-purchasing",
+      "services": ["event-subscribe", "event-unsubscribe"],
+      "providers": ["event_handler"]
+    },
+    {
+      "consumer": "supplier-agent-forecasting",
+      "services": ["event-subscribe", "event-unsubscribe"],
+      "providers": ["event_handler"]
+    },
+    {
+      "consumer": "supplier-agent-sales",
+      "services": ["event-subscribe", "event-unsubscribe"],
+      "providers": ["event_handler"]
+    },
+
+    {
+      "consumer": "carrier-agent-booking",
+      "services": ["trusted-contract-negotiation", "trusted-contract-observation"],
+      "providers": ["carrier-proxy"]
+    },
+    {
+      "consumer": "plant-agent-purchasing",
+      "services": ["trusted-contract-negotiation", "trusted-contract-observation"],
+      "providers": ["plant-proxy"]
+    },
+    {
+      "consumer": "supplier-agent-forecasting",
+      "services": ["trusted-contract-negotiation", "trusted-contract-observation"],
+      "providers": ["supplier-proxy"]
+    },
+    {
+      "consumer": "supplier-agent-sales",
+      "services": ["trusted-contract-negotiation", "trusted-contract-observation"],
+      "providers": ["supplier-proxy"]
+    },
+
+    {
+      "consumer": "carrier-proxy",
+      "services": ["contract-negotiation"],
+      "providers": ["supplier-proxy"]
+    },
+    {
+      "consumer": "carrier-proxy",
+      "services": ["contract-negotiation"],
+      "providers": ["plant-proxy"]
+    },
+    {
+      "consumer": "plant-proxy",
+      "services": ["contract-negotiation"],
+      "providers": ["carrier-proxy"]
+    },
+    {
+      "consumer": "plant-proxy",
+      "services": ["contract-negotiation"],
+      "providers": ["supplier-proxy"]
+    },
+    {
+      "consumer": "supplier-proxy",
+      "services": ["contract-negotiation"],
+      "providers": ["carrier-proxy"]
+    },
+    {
+      "consumer": "supplier-proxy",
+      "services": ["contract-negotiation"],
+      "providers": ["plant-proxy"]
+    },
+
+    {
+      "consumer": "carrier-proxy",
+      "services": ["event-publish"],
+      "providers": ["event_handler"]
+    },
+    {
+      "consumer": "plant-proxy",
+      "services": ["event-publish"],
+      "providers": ["event_handler"]
+    },
+    {
+      "consumer": "supplier-proxy",
+      "services": ["event-publish"],
+      "providers": ["event_handler"]
+    }
+  ]
+}
